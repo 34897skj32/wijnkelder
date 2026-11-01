@@ -254,7 +254,7 @@ function drawGeproefd(){
   const me=S.sort==='liz'?'rating_liz':S.ik==='Liz'?'rating_liz':'rating_jeroen';
   let ws=S.geproefd.filter(match); if(S.sort==='liz') ws=ws.filter(w=>w.rating_liz!=null);
   ws.sort(S.sort==='naam'?(a,b)=>naam(a).localeCompare(naam(b)):S.sort==='laag'?(a,b)=>(a[me]??9)-(b[me]??9):(a,b)=>(b[me]??-1)-(a[me]??-1));
-  $('#main').innerHTML=`<p class="sub">${ws.length} wijnen</p><div class="list" style="margin-top:8px">${ws.slice(0,150).map(w=>card(w,w.voorraad?`<span class="cnt">${w.voorraad}× in kelder</span>`:'')).join('')||'<div class="empty-state">Niets gevonden</div>'}</div>${ws.length>150?'<p class="sub" style="text-align:center;margin-top:12px">Eerste 150 getoond — verfijn je zoekopdracht</p>':''}`;
+  $('#main').innerHTML=`<p class="sub">${ws.length} wijnen</p><div class="list" style="margin-top:8px">${ws.map(w=>card(w,w.voorraad?`<span class="cnt">${w.voorraad}× in kelder</span>`:'')).join('')||'<div class="empty-state">Niets gevonden</div>'}</div>`;
 }
 
 /* ---------- ontdekken ---------- */
