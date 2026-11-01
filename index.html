@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kelder">
+<meta name="theme-color" content="#2a1418">
+<title>Wijnkelder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --bg:#f6f1ea; --card:#fffdf9; --ink:#24181a; --muted:#7d6f6a; --line:#e6ddd2;
+  --wine:#7b1e2f; --wine-soft:#f3e3e3; --liz:#2f6f6a; --liz-soft:#e0eeec;
+  --viv:#8a7a5c; --viv-soft:#efe9dc; --pred:#a8742a;
+  --ok:#3d7a3a; --warn:#b5702a; --bad:#a3352f;
+  --shadow:0 1px 2px rgba(40,20,20,.06),0 4px 14px rgba(40,20,20,.06);
+  --r:16px; --serif:'Fraunces',Georgia,serif; --sans:'Inter',system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#171113; --card:#221a1c; --ink:#f1e8e4; --muted:#a8999a; --line:#3a2e30;
+  --wine:#e0707f; --wine-soft:#3d2228; --liz:#6cc0b7; --liz-soft:#1e3533;
+  --viv:#c9b98f; --viv-soft:#332d22; --pred:#e0a85a; --shadow:none;}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);-webkit-font-smoothing:antialiased;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:-.01em}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(10px + env(safe-area-inset-top)) 16px 8px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.top h1{font-size:26px}
+.who{display:flex;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px}
+.who button{padding:5px 12px;border-radius:99px;font-size:13px;font-weight:500;color:var(--muted)}
+.who button.on{background:var(--ink);color:var(--bg)}
+.sub{color:var(--muted);font-size:13px;margin-top:2px}
+.search{margin-top:10px;width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);outline:none}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{white-space:nowrap;padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--card);font-size:13px;color:var(--muted)}
+.chip.on{background:var(--wine);border-color:var(--wine);color:#fff}
+main{padding:4px 16px 20px;max-width:760px;margin:0 auto}
+.group{margin:18px 0 8px;display:flex;align-items:baseline;justify-content:space-between}
+.group h2{font-size:18px}
+.group span{color:var(--muted);font-size:13px}
+.list{display:grid;gap:10px}
+@media(min-width:700px){.list{grid-template-columns:1fr 1fr}}
+.card{display:flex;gap:12px;background:var(--card);border-radius:var(--r);padding:12px;box-shadow:var(--shadow);border:1px solid var(--line);text-align:left;width:100%}
+.lbl{width:62px;height:84px;flex:none;border-radius:10px;background:var(--wine-soft) center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:22px;color:var(--wine);overflow:hidden;position:relative}
+.lbl img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:var(--card)}
+.cbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.cname{font-family:var(--serif);font-size:16px;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cmeta{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crow{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto}
+.scores{display:flex;gap:5px}
+.sc{min-width:42px;padding:3px 6px 2px;border-radius:9px;text-align:center;line-height:1.1}
+.sc b{display:block;font-size:15px;font-weight:600}
+.sc i{font-style:normal;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;opacity:.8}
+.sc.j{background:var(--wine-soft);color:var(--wine)}
+.sc.l{background:var(--liz-soft);color:var(--liz)}
+.sc.v{background:var(--viv-soft);color:var(--viv)}
+.sc.p{border:1.5px dashed var(--pred);color:var(--pred)}
+.sc.empty{opacity:.35}
+.cnt{font-weight:600;font-size:13px;white-space:nowrap}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:var(--viv-soft);color:var(--viv);font-weight:500}
+.tag.best{background:#e3f0df;color:var(--ok)}.tag.nu{background:#f8e6d3;color:var(--warn)}.tag.over{background:#f6dcda;color:var(--bad)}
+.empty-state{text-align:center;color:var(--muted);padding:40px 16px}
+.empty-state h3{color:var(--ink);font-size:20px;margin-bottom:6px}
+nav{position:fixed;bottom:0;left:0;right:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:center;padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+nav button{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--muted);padding:4px 10px;min-width:60px}
+nav button svg{width:22px;height:22px}
+nav button.on{color:var(--wine)}
+nav .plus{width:52px;height:52px;border-radius:50%;background:var(--wine);color:#fff;margin-top:-26px;box-shadow:0 6px 18px rgba(123,30,47,.35);justify-content:center;padding:0;min-width:0}
+nav .plus svg{width:26px;height:26px}
+/* sheet */
+.sheet-bg{position:fixed;inset:0;background:rgba(20,10,12,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center;animation:fade .15s}
+.sheet{background:var(--bg);width:100%;max-width:640px;max-height:92vh;overflow-y:auto;border-radius:22px 22px 0 0;padding:8px 16px calc(24px + env(safe-area-inset-bottom));animation:up .2s ease-out}
+.grab{width:40px;height:4px;border-radius:4px;background:var(--line);margin:4px auto 10px}
+@keyframes up{from{transform:translateY(30px);opacity:.5}}@keyframes fade{from{opacity:0}}
+.hero{display:flex;gap:14px;align-items:flex-start}
+.hero .lbl{width:92px;height:126px}
+.hero h2{font-size:22px;line-height:1.15}
+.big-scores{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0 6px}
+.bs{border-radius:14px;padding:10px 6px 8px;text-align:center}
+.bs b{font-family:var(--serif);font-size:26px;display:block;line-height:1}
+.bs i{font-style:normal;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.bs.j{background:var(--wine-soft);color:var(--wine)}.bs.l{background:var(--liz-soft);color:var(--liz)}.bs.v{background:var(--viv-soft);color:var(--viv)}.bs.p{border:1.5px dashed var(--pred);color:var(--pred)}
+.bs.empty b{opacity:.3}
+.sec{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-top:12px}
+.sec h3{font-size:15px;margin-bottom:8px}
+.note{border-left:3px solid var(--wine);padding:2px 0 2px 10px;margin:10px 0}
+.note.Liz{border-color:var(--liz)}
+.note small{color:var(--muted);font-size:12px;display:block}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}
+.kv dt{color:var(--muted)}
+.timeline{position:relative;height:34px;margin:8px 0 2px}
+.tl-bar{position:absolute;top:12px;height:8px;border-radius:8px;background:var(--viv-soft)}
+.tl-best{position:absolute;top:12px;height:8px;border-radius:8px;background:var(--ok)}
+.tl-now{position:absolute;top:4px;width:2px;height:24px;background:var(--ink)}
+.tl-lab{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.bar{display:grid;grid-template-columns:70px 1fr;align-items:center;gap:8px;font-size:13px;margin:4px 0}
+.bar div{height:6px;border-radius:6px;background:var(--line);overflow:hidden}.bar div span{display:block;height:100%;background:var(--wine)}
+.loc{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
+.loc:first-of-type{border-top:0}
+.btn{padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;background:var(--wine);color:#fff;text-align:center}
+.btn.sec2{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.btn.sm{padding:7px 12px;font-size:13px;border-radius:10px}
+.btn.full{width:100%;margin-top:14px}
+.btn:disabled{opacity:.5}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+label.f{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+.inp{width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);outline:none}
+textarea.inp{min-height:70px;resize:vertical}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:64px;padding:10px 8px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-weight:500;font-size:14px}
+.seg button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg button.rec{border-color:var(--ok)}
+.stepper{display:flex;align-items:center;gap:14px}
+.stepper button{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:22px}
+.stepper b{font-family:var(--serif);font-size:28px;min-width:30px;text-align:center}
+.rate{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-top:12px}
+.rate.Jeroen{border-top:4px solid var(--wine)}.rate.Liz{border-top:4px solid var(--liz)}
+.rate-h{display:flex;justify-content:space-between;align-items:center}
+.rate-n{font-family:var(--serif);font-size:40px;line-height:1}
+.rate.Jeroen .rate-n{color:var(--wine)}.rate.Liz .rate-n{color:var(--liz)}
+input[type=range]{width:100%;margin:12px 0 4px;accent-color:var(--wine)}
+.rate.Liz input[type=range]{accent-color:var(--liz)}
+.res{display:flex;gap:10px;align-items:center;padding:9px 4px;border-bottom:1px solid var(--line);width:100%;text-align:left}
+.res .lbl{width:36px;height:48px;font-size:14px;border-radius:7px}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;z-index:30;font-size:14px;max-width:90vw;animation:fade .2s}
+.toast.err{background:var(--bad);color:#fff}
+.login{max-width:360px;margin:12vh auto 0;padding:0 16px}
+.login h1{font-size:38px;margin-bottom:4px}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat div{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}
+.stat b{font-family:var(--serif);font-size:24px;display:block}
+.stat i{font-style:normal;font-size:12px;color:var(--muted)}
+.srow{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.srow:first-of-type{border-top:0}
+.srow span:last-child{font-weight:600;white-space:nowrap}
+.muted{color:var(--muted)}
+.mut{font-size:13px;display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const SB_URL='https://tjkdywtyssdhssnldmkn.supabase.co';
+const SB_KEY='sb_publishable_DO9L0-U5NC_YEjxiHZbVwg_-9BLF2Iz';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const ZONES=['8°C','10°C','16°C','18°C'];
+const ZNAAM={'8°C':'8°C klimaatkast','10°C':'10°C klimaatkast','16°C':'16°C klimaatkast','18°C':'18°C kelder'};
+const KLEUREN=['Rood','Wit','Rosé','Mousserend','Dessertwijn'];
+const COLS='wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,land,regio,regionale_stijl,stijlfamilie,druiven,etiketfoto_url,flesfoto_url,vivino_gemiddelde,likely_to_like_jeroen,likely_to_like_liz,match_betrouwbaarheid_jeroen,match_betrouwbaarheid_liz,voorraad,locaties,rating_jeroen,rating_liz,aantal_ratings_jeroen,aantal_ratings_liz,drinkstatus,bewaarzone_advies';
+const ls={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const S={ik:ls.get('ik','Jeroen'),tab:ls.get('tab','kelder'),groep:ls.get('groep','zone'),kleur:'',q:'',kelder:null,vakken:[],geproefd:null,ontdek:[],smaak:null,sort:'rating'};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const f1=n=>n==null?'–':Number(n).toFixed(1);
+const naam=w=>[w.producent,w.wijnnaam_cuvee].filter(Boolean).join(' · ');
+const meta=w=>[w.jaargang,w.regio||w.land,w.wijnkleur].filter(Boolean).join(' · ');
+function toast(m,err){const t=document.createElement('div');t.className='toast'+(err?' err':'');t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),err?5000:2200)}
+async function q(p){const {data,error}=await p;if(error){console.error(error);toast(error.message.replace(/^.*?: /,''),1);throw error}return data}
+const NLERR={'Onvoldoende':'Er ligt hier geen fles meer'};
+
+function lbl(w,cls='lbl'){const u=w.flesfoto_url||w.etiketfoto_url;const ini=esc((w.wijnkleur||'?')[0]);
+  return `<div class="${cls}">${ini}${u?`<img loading="lazy" src="${esc(u)}" alt="" onerror="this.remove()">`:''}</div>`}
+function sc(cls,v,lab){return `<div class="sc ${cls}${v==null?' empty':''}"><b>${f1(v)}</b><i>${lab}</i></div>`}
+function scores(w){
+  const own=w.rating_jeroen!=null||w.rating_liz!=null;
+  return `<div class="scores">${sc('j',w.rating_jeroen,'Jeroen')}${sc('l',w.rating_liz,'Liz')}${sc('v',w.vivino_gemiddelde,'Vivino')}${!own&&w.likely_to_like_jeroen!=null?sc('p',w.likely_to_like_jeroen,'Verwacht'):''}</div>`}
+function stag(s){if(!s)return'';const c={'Op zijn best':'best','Nadert piek':'best','Nu drinken':'nu','Mogelijk over top':'over'}[s]||'';return `<span class="tag ${c}">${esc(s)}</span>`}
+function card(w,extra){return `<button class="card" onclick="detail('${w.wijn_id}')">${lbl(w)}<div class="cbody">
+  <div class="cname">${esc(naam(w))}</div><div class="cmeta">${esc(meta(w))}</div>
+  ${extra?`<div class="cmeta">${extra}</div>`:''}
+  <div class="crow">${scores(w)}</div></div></button>`}
+
+/* ---------- auth ---------- */
+async function start(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session) return loginView();
+  render();
+}
+function loginView(){
+  $('#app').innerHTML=`<div class="login"><h1>Wijnkelder</h1><p class="muted">Log in met je account.</p>
+  <label class="f">E-mail</label><input class="inp" id="em" type="email" autocomplete="username">
+  <label class="f">Wachtwoord</label><input class="inp" id="pw" type="password" autocomplete="current-password">
+  <button class="btn full" id="lb">Inloggen</button></div>`;
+  $('#lb').onclick=async()=>{const {error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});
+    if(error) return toast('Inloggen mislukt: '+error.message,1); render();};
+}
+
+/* ---------- shell ---------- */
+const ICON={
+ kelder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10l9-6 9 6v10H3z"/><path d="M8 20v-6h8v6M8 17h8"/></svg>',
+ geproefd:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h10l-1 7a4 4 0 01-8 0z"/><path d="M12 14v6M8 21h8"/></svg>',
+ ontdek:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>',
+ smaak:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+ plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>'};
+function render(){
+  const t=S.tab;
+  $('#app').innerHTML=`<header><div class="top"><h1>${{kelder:'Mijn kelder',geproefd:'Geproefd',ontdek:'Ontdekken',smaak:'Onze smaak'}[t]}</h1>
+   <div class="who">${['Jeroen','Liz'].map(p=>`<button class="${S.ik===p?'on':''}" onclick="setIk('${p}')">${p}</button>`).join('')}</div></div>
+   <div id="hsub"></div></header><main id="main"><div class="empty-state">Laden…</div></main>
+  <nav>${navb('kelder','Kelder')}${navb('geproefd','Geproefd')}<button class="plus" onclick="addFlow()" aria-label="Toevoegen">${ICON.plus}</button>${navb('ontdek','Ontdekken')}${navb('smaak','Smaak')}</nav>`;
+  ({kelder:kelderView,geproefd:geproefdView,ontdek:ontdekView,smaak:smaakView})[t]();
+}
+function navb(k,l){return `<button class="${S.tab===k?'on':''}" onclick="go('${k}')">${ICON[k]}${l}</button>`}
+function go(t){S.tab=t;ls.set('tab',t);S.q='';S.kleur='';render();scrollTo(0,0)}
+function setIk(p){S.ik=p;ls.set('ik',p);render()}
+function filterbar(placeholder,groups){
+  return `<input class="search" placeholder="${placeholder}" value="${esc(S.q)}" oninput="S.q=this.value;refresh()">
+  <div class="chips">${['',...KLEUREN].map(k=>`<button class="chip ${S.kleur===k?'on':''}" onclick="S.kleur='${k}';render()">${k||'Alles'}</button>`).join('')}</div>
+  ${groups||''}`}
+let rt;function refresh(){clearTimeout(rt);rt=setTimeout(()=>({kelder:drawKelder,geproefd:drawGeproefd,ontdek:ontdekSearch})[S.tab]?.(),180)}
+const match=w=>(!S.kleur||w.wijnkleur===S.kleur)&&(!S.q||(naam(w)+' '+meta(w)+' '+(w.druiven||'')+' '+(w.regionale_stijl||'')).toLowerCase().includes(S.q.toLowerCase()));
+
+/* ---------- kelder ---------- */
+async function kelderView(){
+  const G={zone:'Zone',kleur:'Kleur',land:'Land',stijl:'Stijl',status:'Drinkmoment'};
+  $('#hsub').innerHTML=filterbar('Zoek in kelder…',`<div class="chips">${Object.entries(G).map(([k,l])=>`<button class="chip ${S.groep===k?'on':''}" onclick="S.groep='${k}';ls.set('groep','${k}');drawKelder();this.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===this))">${l}</button>`).join('')}</div>`);
+  if(!S.kelder){
+    const [w,v]=await Promise.all([q(sb.from('wijn_overzicht').select(COLS).gt('voorraad',0)),q(sb.from('voorraad_per_vak').select('*'))]);
+    S.kelder=w;S.vakken=v;
+  }
+  drawKelder();
+}
+const PRIO={'Mogelijk over top':0,'Nu drinken':1,'Op zijn best':2,'Nadert piek':3,'Drinkbaar':4,'Kan nog rijpen':5};
+function drawKelder(){
+  const ws=S.kelder.filter(match), tot=ws.reduce((a,w)=>a+w.voorraad,0);
+  if(!S.kelder.length) return $('#main').innerHTML=`<div class="empty-state"><h3>Je kelder is nog leeg</h3>Tik op <b>+</b> om flessen toe te voegen die je nu in huis hebt.<br><br><button class="btn" onclick="addFlow()">Eerste fles toevoegen</button></div>`;
+  const by={};const put=(k,item)=>(by[k]=by[k]||[]).push(item);
+  if(S.groep==='zone'){
+    const W=Object.fromEntries(ws.map(w=>[w.wijn_id,w]));
+    S.vakken.filter(v=>W[v.wijn_id]).forEach(v=>put(ZNAAM[v.zone]+(v.vak?' · '+v.vak:''),{w:W[v.wijn_id],n:v.aantal,z:v.zone}));
+  } else ws.forEach(w=>put(({kleur:w.wijnkleur,land:w.land,stijl:w.stijlfamilie||w.regionale_stijl||'Onbekende stijl',status:w.drinkstatus||'Nog geen drinkadvies'})[S.groep]||'Onbekend',{w,n:w.voorraad}));
+  let keys=Object.keys(by);
+  if(S.groep==='zone') keys.sort((a,b)=>ZONES.indexOf(by[a][0].z)-ZONES.indexOf(by[b][0].z)||a.localeCompare(b));
+  else if(S.groep==='status') keys.sort((a,b)=>(PRIO[a]??9)-(PRIO[b]??9)); else keys.sort();
+  $('#main').innerHTML=`<p class="sub">${tot} flessen · ${ws.length} wijnen</p>`+keys.map(k=>{
+    const it=by[k].sort((a,b)=>(PRIO[a.w.drinkstatus]??9)-(PRIO[b.w.drinkstatus]??9)||naam(a.w).localeCompare(naam(b.w)));
+    return `<div class="group"><h2>${esc(k)}</h2><span>${it.reduce((a,i)=>a+i.n,0)} fl.</span></div><div class="list">${it.map(i=>card(i.w,`<span class="cnt">${i.n}×</span> ${S.groep!=='zone'?esc(i.w.locaties||''):''} ${stag(i.w.drinkstatus)}`)).join('')}</div>`}).join('');
+}
+
+/* ---------- geproefd ---------- */
+async function geproefdView(){
+  $('#hsub').innerHTML=filterbar('Zoek in geproefde wijnen…',`<div class="chips">${[['rating','Hoogste eerst'],['laag','Laagste eerst'],['naam','Naam'],['liz','Liz']].map(([k,l])=>`<button class="chip ${S.sort===k?'on':''}" onclick="S.sort='${k}';render()">${l}</button>`).join('')}</div>`);
+  if(!S.geproefd) S.geproefd=await q(sb.from('wijn_overzicht').select(COLS).or('aantal_ratings_jeroen.gt.0,aantal_ratings_liz.gt.0').limit(5000));
+  drawGeproefd();
+}
+function drawGeproefd(){
+  const me=S.sort==='liz'?'rating_liz':S.ik==='Liz'?'rating_liz':'rating_jeroen';
+  let ws=S.geproefd.filter(match); if(S.sort==='liz') ws=ws.filter(w=>w.rating_liz!=null);
+  ws.sort(S.sort==='naam'?(a,b)=>naam(a).localeCompare(naam(b)):S.sort==='laag'?(a,b)=>(a[me]??9)-(b[me]??9):(a,b)=>(b[me]??-1)-(a[me]??-1));
+  $('#main').innerHTML=`<p class="sub">${ws.length} wijnen</p><div class="list" style="margin-top:8px">${ws.slice(0,150).map(w=>card(w,w.voorraad?`<span class="cnt">${w.voorraad}× in kelder</span>`:'')).join('')||'<div class="empty-state">Niets gevonden</div>'}</div>${ws.length>150?'<p class="sub" style="text-align:center;margin-top:12px">Eerste 150 getoond — verfijn je zoekopdracht</p>':''}`;
+}
+
+/* ---------- ontdekken ---------- */
+async function ontdekView(){
+  $('#hsub').innerHTML=filterbar('Zoek producent, wijn, regio of druif…');
+  ontdekSearch();
+}
+async function ontdekSearch(){
+  let p=sb.from('wijn_overzicht').select(COLS);
+  const t=S.q.trim().replace(/[,()%]/g,' ');
+  if(t) t.split(/\s+/).forEach(x=>{p=/^\d{4}$/.test(x)?p.eq('jaargang',+x):p.or(`producent.ilike.%${x}%,wijnnaam_cuvee.ilike.%${x}%,regio.ilike.%${x}%,regionale_stijl.ilike.%${x}%,land.ilike.%${x}%,druiven.ilike.%${x}%`)});
+  if(S.kleur) p=p.eq('wijnkleur',S.kleur);
+  const col=S.ik==='Liz'?'likely_to_like_liz':'likely_to_like_jeroen';
+  const ws=await q(p.order(col,{ascending:false,nullsFirst:false}).limit(60));
+  $('#main').innerHTML=`<p class="sub">${t?'Resultaten':'Grootste kans dat '+(S.ik==='Liz'?'Liz':'jij')+' ze lekker vindt'}</p><div class="list" style="margin-top:8px">${ws.map(w=>card(w)).join('')||'<div class="empty-state">Niets gevonden</div>'}</div>`;
+}
+
+/* ---------- smaak ---------- */
+async function smaakView(){
+  $('#hsub').innerHTML='';
+  if(!S.smaak) S.smaak=await q(sb.from('proefnotities').select('persoon,eigen_rating,wijnen(wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,land,regio,regionale_stijl,etiketfoto_url)').limit(10000));
+  const rs=S.smaak.filter(r=>r.persoon===S.ik&&r.eigen_rating!=null&&r.wijnen);
+  if(!rs.length) return $('#main').innerHTML=`<div class="empty-state"><h3>Nog geen beoordelingen van ${S.ik}</h3>Zodra ${S.ik} wijnen beoordeelt, verschijnt hier het smaakprofiel. De voorspellingen worden dan steeds beter.</div>`;
+  const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
+  const grp=k=>{const g={};rs.forEach(r=>{const v=r.wijnen[k];if(v)(g[v]=g[v]||[]).push(+r.eigen_rating)});return Object.entries(g).map(([k,a])=>({k,n:a.length,a:avg(a)}))};
+  const stijl=grp('regionale_stijl').filter(x=>x.n>=3).sort((a,b)=>b.a-a.a);
+  const kleur=grp('wijnkleur').sort((a,b)=>b.n-a.n);
+  const top=[...rs].sort((a,b)=>b.eigen_rating-a.eigen_rating).slice(0,8);
+  const row=x=>`<div class="srow"><span>${esc(x.k)} <span class="muted">(${x.n})</span></span><span>${x.a.toFixed(2)}</span></div>`;
+  $('#main').innerHTML=`<div class="stat" style="margin-top:6px"><div><b>${rs.length}</b><i>beoordelingen</i></div><div><b>${avg(rs.map(r=>+r.eigen_rating)).toFixed(2)}</b><i>gemiddeld</i></div><div><b>${rs.filter(r=>r.eigen_rating>=4).length}</b><i>4,0 of hoger</i></div></div>
+  <div class="sec"><h3>Per kleur</h3>${kleur.map(row).join('')}</div>
+  <div class="sec"><h3>Favoriete stijlen</h3>${stijl.slice(0,8).map(row).join('')||'<p class="muted">Nog te weinig data</p>'}</div>
+  <div class="sec"><h3>Minst favoriete stijlen</h3>${stijl.slice(-4).reverse().map(row).join('')}</div>
+  <div class="sec"><h3>Topwijnen</h3>${top.map(r=>`<div class="srow" onclick="detail('${r.wijnen.wijn_id}')" style="cursor:pointer"><span>${esc(naam(r.wijnen))} ${r.wijnen.jaargang||''}</span><span>${f1(r.eigen_rating)}</span></div>`).join('')}</div>
+  <p class="sub" style="margin-top:10px">Stijlen met minimaal 3 beoordelingen.</p>`;
+}
+
+/* ---------- sheet helpers ---------- */
+function sheet(html){closeSheet();const bg=document.createElement('div');bg.className='sheet-bg';bg.id='sh';
+  bg.innerHTML=`<div class="sheet"><div class="grab"></div>${html}</div>`;bg.onclick=e=>{if(e.target===bg)closeSheet()};document.body.appendChild(bg);document.body.style.overflow='hidden'}
+function closeSheet(){$('#sh')?.remove();document.body.style.overflow=''}
+function invalidate(){S.kelder=null;S.geproefd=null;S.smaak=null}
+
+/* ---------- detail ---------- */
+async function detail(id){
+  sheet('<div class="empty-state">Laden…</div>');
+  const [[w],notes,vak,muts]=await Promise.all([
+    q(sb.from('wijn_overzicht').select('*').eq('wijn_id',id)),
+    q(sb.from('proefnotities').select('*').eq('wijn_id',id).order('aangemaakt',{ascending:false})),
+    q(sb.from('voorraad_per_vak').select('*').eq('wijn_id',id)),
+    q(sb.from('voorraadmutaties').select('*').eq('wijn_id',id).eq('testgegeven',false).order('datumtijd',{ascending:false}).limit(6))]);
+  const dk=n=>n.drinkdatum_bevestigd||n.review_kalenderdatum||n.aangemaakt||'';notes.sort((a,b)=>dk(b).localeCompare(dk(a)));
+  S.cur={w,vak,muts};
+  const own=w.rating_jeroen!=null||w.rating_liz!=null;
+  const pred=S.ik==='Liz'?w.likely_to_like_liz:w.likely_to_like_jeroen, betr=S.ik==='Liz'?w.match_betrouwbaarheid_liz:w.match_betrouwbaarheid_jeroen;
+  const bs=(c,v,l)=>`<div class="bs ${c}${v==null?' empty':''}"><b>${f1(v)}</b><i>${l}</i></div>`;
+  const y=new Date().getFullYear();
+  let tl='<p class="muted">Nog geen drinkadvies voor deze wijn.</p>';
+  if(w.drinkvenster_vanaf_jaar&&w.drinkvenster_tot_jaar){
+    const a=Math.min(w.drinkvenster_vanaf_jaar,y),b=Math.max(w.drinkvenster_tot_jaar,y),sp=Math.max(b-a,1),pc=x=>((x-a)/sp*100).toFixed(1)+'%';
+    tl=`<div class="timeline"><div class="tl-bar" style="left:${pc(w.drinkvenster_vanaf_jaar)};right:calc(100% - ${pc(w.drinkvenster_tot_jaar)})"></div>
+    ${w.beste_drinkmoment_vanaf?`<div class="tl-best" style="left:${pc(w.beste_drinkmoment_vanaf)};right:calc(100% - ${pc(w.beste_drinkmoment_tot||w.beste_drinkmoment_vanaf)})"></div>`:''}
+    <div class="tl-now" style="left:${pc(y)}"></div></div><div class="tl-lab"><span>${a}</span><span>nu: ${stag(w.drinkstatus)}</span><span>${b}</span></div>
+    ${w.beste_drinkmoment_vanaf?`<p class="sub">Op zijn best: ${w.beste_drinkmoment_vanaf}–${w.beste_drinkmoment_tot||''}</p>`:''}`}
+  const prof=[['Body',w.body],['Zuren',w.zuren],['Tannines',w.tannines],['Fruit',w.fruit]].filter(x=>x[1]);
+  $('#sh .sheet').innerHTML=`<div class="grab"></div>
+  <div class="hero">${lbl(w)}<div style="flex:1;min-width:0"><h2>${esc(naam(w))}</h2><p class="sub">${esc([w.jaargang,w.regio,w.land].filter(Boolean).join(' · '))}</p>
+   <p class="sub">${esc([w.wijnkleur,w.druiven,w.stijlfamilie||w.regionale_stijl].filter(Boolean).join(' · '))}</p></div></div>
+  <div class="big-scores">${bs('j',w.rating_jeroen,'Jeroen')}${bs('l',w.rating_liz,'Liz')}${bs('v',w.vivino_gemiddelde,'Vivino')}${bs('p',pred,'Verwacht')}</div>
+  ${pred!=null?`<p class="sub">Verwacht = geschat cijfer voor ${S.ik==='Liz'?'Liz':'jou'}${betr?` · betrouwbaarheid ${esc(betr.toLowerCase())}`:''}${w.match_toelichting?` — ${esc(w.match_toelichting)}`:''}</p>`:''}
+  <div class="row" style="margin-top:12px"><button class="btn" style="flex:1" onclick="rateFlow('${id}')">Beoordelen</button><button class="btn sec2" style="flex:1" onclick="addFlow('${id}')">+ Flessen</button></div>
+  <div class="sec"><h3>In de kelder${w.voorraad?` · ${w.voorraad} fl.`:''}</h3>
+   ${vak.length?vak.map((v,i)=>`<div class="loc"><div><b>${v.aantal}×</b> ${esc(ZNAAM[v.zone])}${v.vak?' · '+esc(v.vak):''}</div><div class="row"><button class="btn sm sec2" onclick="moveFlow(${i})">Verplaats</button><button class="btn sm" onclick="drinkFlow(${i})">Drinken</button></div></div>`).join(''):'<p class="muted">Niet op voorraad.</p>'}
+   ${w.bewaarzone_advies?`<p class="sub" style="margin-top:6px">Bewaaradvies: ${esc(w.bewaarzone_advies)}${w.bewaarzone_toelichting?' — '+esc(w.bewaarzone_toelichting):''}</p>`:''}</div>
+  <div class="sec"><h3>Drinken</h3>${tl}
+   <dl class="kv" style="margin-top:10px">${w.serveertemperatuur_c?`<dt>Schenken</dt><dd>${w.serveertemperatuur_c}°C</dd>`:''}${w.decanteeradvies?`<dt>Decanteren</dt><dd>${esc(w.decanteeradvies)}${w.decanteertijd_minuten?` · ${w.decanteertijd_minuten} min`:''}${w.decanteertoelichting?`<br><span class="muted">${esc(w.decanteertoelichting)}</span>`:''}</dd>`:''}</dl></div>
+  ${prof.length?`<div class="sec"><h3>Smaakprofiel</h3>${prof.map(([k,v])=>`<div class="bar">${k}<div><span style="width:${v*20}%"></span></div></div>`).join('')}${w.houtgebruik?`<p class="sub">Hout: ${esc(w.houtgebruik)}</p>`:''}</div>`:''}
+  <div class="sec"><h3>Proefnotities</h3>${notes.length?notes.map(n=>`<div class="note ${n.persoon}"><b>${esc(n.persoon)} · ${f1(n.eigen_rating)}</b>${n.opnieuw_kopen?` · opnieuw kopen: ${esc(n.opnieuw_kopen)}`:''}<div>${esc(n.eigen_proefnotitie||'')}</div><small>${esc(n.drinkdatum_bevestigd||n.review_kalenderdatum||(n.aangemaakt||'').slice(0,10))} · ${esc(n.bron)}</small></div>`).join(''):'<p class="muted">Nog niet geproefd.</p>'}</div>
+  ${muts.length?`<div class="sec"><h3>Laatste mutaties</h3>${muts.map(m=>`<div class="mut"><span>${new Date(m.datumtijd).toLocaleDateString('nl-NL')} · ${esc(m.reden)} ${m.aantal_delta>0?'+':''}${m.aantal_delta} · ${esc(m.zone)}${m.vak?' '+esc(m.vak):''}</span>${['Inventarisatie','Aankoop','Gedronken'].includes(m.reden)&&!muts.some(x=>x.correctie_van_mutatie_id===m.mutatie_id)?`<button class="btn sm sec2" onclick="corrigeer('${m.mutatie_id}')">Ongedaan</button>`:''}</div>`).join('')}</div>`:''}
+  ${w.vivino_url?`<p style="text-align:center;margin-top:14px"><a class="sub" href="${esc(w.vivino_url)}" target="_blank" rel="noopener">Bekijk op Vivino ↗</a></p>`:''}`;
+}
+async function corrigeer(m){if(!confirm('Deze mutatie ongedaan maken? Er wordt een correctie vastgelegd.'))return;
+  try{await q(sb.rpc('mutatie_corrigeren',{p_mutatie:m,p_door:S.ik}));toast('Gecorrigeerd');invalidate();detail(S.cur.w.wijn_id);render()}catch(e){}}
+
+/* ---------- drinken + beoordelen ---------- */
+function drinkFlow(i){const v=S.cur.vak[i],w=S.cur.w;
+  sheet(`<h2>Fles openen</h2><p class="sub">${esc(naam(w))} ${w.jaargang||''} · uit ${esc(ZNAAM[v.zone])}${v.vak?' · '+esc(v.vak):''}</p>
+  ${w.decanteeradvies?`<div class="sec"><b>Decanteren:</b> ${esc(w.decanteeradvies)}${w.decanteertijd_minuten?` · ${w.decanteertijd_minuten} min`:''}${w.serveertemperatuur_c?`<br><b>Schenken op:</b> ${w.serveertemperatuur_c}°C`:''}</div>`:''}
+  <label class="f">Gelegenheid (optioneel)</label><input class="inp" id="gel" placeholder="bijv. etentje met vrienden">
+  <label class="f">Gerecht (optioneel)</label><input class="inp" id="ger" placeholder="bijv. lamsrack">
+  <button class="btn full" id="go">Fles gedronken · 1 afboeken</button>`);
+  $('#go').onclick=async e=>{e.target.disabled=true;
+    try{const dm=await q(sb.rpc('fles_drinken',{p_wijn:w.wijn_id,p_zone:v.zone,p_vak:v.vak||'',p_door:S.ik,p_gelegenheid:$('#gel').value||null,p_gerecht:$('#ger').value||null}));
+      invalidate();toast('1 fles afgeboekt');rateFlow(w.wijn_id,dm)}catch(err){e.target.disabled=false}};
+}
+function rateBlock(p){return `<div class="rate ${p}" data-p="${p}"><div class="rate-h"><h3>${p}</h3><span class="rate-n">–</span></div>
+  <input type="range" min="1" max="5" step="0.1" value="3.5" oninput="this.closest('.rate').querySelector('.rate-n').textContent=(+this.value).toFixed(1);this.closest('.rate').dataset.set=1">
+  <div class="tl-lab"><span>1</span><span>3</span><span>5</span></div>
+  <label class="f">Waarom dit cijfer?</label><textarea class="inp nt" placeholder="Wat proef je, wat viel op? (dicteren via toetsenbord kan ook)"></textarea>
+  <label class="f">Opnieuw kopen?</label><div class="seg ok">${['ja','misschien','nee'].map(x=>`<button onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this&&!b.classList.contains('on')))">${x}</button>`).join('')}</div></div>`}
+function rateFlow(id,dm){const w=S.cur?.w;
+  const ppl=S.ik==='Liz'?['Liz','Jeroen']:['Jeroen','Liz'];
+  sheet(`<h2>Beoordelen</h2><p class="sub">${esc(w?naam(w)+' '+(w.jaargang||''):'')}${dm?' · deze fles':''}. Schuif het cijfer om te beoordelen; wie niet beoordeelt, sla je gewoon over.</p>
+  ${ppl.map(rateBlock).join('')}<button class="btn full" id="sv">Opslaan</button><button class="btn sec2 full" style="margin-top:8px" onclick="closeSheet();render()">Overslaan</button>`);
+  $('#sv').onclick=async e=>{
+    const rows=[...document.querySelectorAll('.rate')].filter(b=>b.dataset.set||b.querySelector('.nt').value.trim()).map(b=>({
+      wijn_id:id,persoon:b.dataset.p,eigen_rating:b.dataset.set?+b.querySelector('input').value:null,
+      eigen_proefnotitie:b.querySelector('.nt').value.trim()||null,opnieuw_kopen:b.querySelector('.seg .on')?.textContent||null,
+      drinkmoment_id:dm||null,drinkdatum_bevestigd:new Date().toISOString().slice(0,10),bron:'App'}));
+    if(!rows.length){closeSheet();render();return}
+    e.target.disabled=true;
+    try{await q(sb.from('proefnotities').insert(rows));toast('Beoordeling opgeslagen');invalidate();closeSheet();render();detail(id)}catch(err){e.target.disabled=false}};
+}
+
+/* ---------- verplaatsen ---------- */
+function moveFlow(i){const v=S.cur.vak[i],w=S.cur.w;let n=1,z=null;
+  sheet(`<h2>Verplaatsen</h2><p class="sub">Van ${esc(ZNAAM[v.zone])}${v.vak?' · '+esc(v.vak):''} (${v.aantal} fl.)</p>
+  <label class="f">Aantal</label><div class="stepper"><button id="mn">−</button><b id="nn">1</b><button id="pl">+</button></div>
+  <label class="f">Naar zone</label><div class="seg" id="zs">${ZONES.map(x=>`<button data-z="${x}">${x}</button>`).join('')}</div>
+  <label class="f">Plank / vak (optioneel)</label><input class="inp" id="vk" list="vkl"><datalist id="vkl">${vakList()}</datalist>
+  <button class="btn full" id="go">Verplaatsen</button>`);
+  $('#mn').onclick=()=>{n=Math.max(1,n-1);$('#nn').textContent=n};$('#pl').onclick=()=>{n=Math.min(v.aantal,n+1);$('#nn').textContent=n};
+  $('#zs').onclick=e=>{if(e.target.dataset.z){z=e.target.dataset.z;$('#zs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target))}};
+  $('#go').onclick=async e=>{if(!z)return toast('Kies een zone',1);const nv=$('#vk').value.trim();if(z===v.zone&&nv===(v.vak||''))return toast('Dat is dezelfde plek',1);
+    e.target.disabled=true;try{await q(sb.rpc('fles_verplaatsen',{p_wijn:w.wijn_id,p_van_zone:v.zone,p_van_vak:v.vak||'',p_naar_zone:z,p_naar_vak:nv,p_aantal:n,p_door:S.ik}));
+    toast('Verplaatst');invalidate();render();detail(w.wijn_id)}catch(err){e.target.disabled=false}};
+}
+function vakList(){return [...new Set((S.vakken||[]).map(v=>v.vak).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}
+
+/* ---------- toevoegen ---------- */
+function addFlow(id){
+  if(id) return addForm(S.cur.w);
+  sheet(`<h2>Flessen toevoegen</h2><p class="sub">Zoek de wijn in je bibliotheek (2.000+ wijnen uit Vivino).</p>
+  <input class="search" id="as" placeholder="Producent, wijnnaam, jaargang…" autofocus><div id="ar"></div>
+  <button class="btn sec2 full" onclick="newWine()">Staat er niet tussen → nieuwe wijn</button>`);
+  let t;$('#as').oninput=e=>{clearTimeout(t);t=setTimeout(async()=>{const v=e.target.value.trim().replace(/[,()%]/g,' ');if(v.length<2)return $('#ar').innerHTML='';
+    let p=sb.from('wijnen').select('wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,regio,land,etiketfoto_url,flesfoto_url,bewaarzone_advies');
+    v.split(/\s+/).forEach(x=>{p=/^\d{4}$/.test(x)?p.eq('jaargang',+x):p.or(`producent.ilike.%${x}%,wijnnaam_cuvee.ilike.%${x}%`)});
+    const r=await q(p.order('jaargang',{ascending:false,nullsFirst:false}).limit(20));S.addRes=r;
+    $('#ar').innerHTML=r.map((w,i)=>`<button class="res" onclick="addForm(S.addRes[${i}])">${lbl(w)}<div><b>${esc(naam(w))}</b><div class="cmeta">${esc(meta(w))}</div></div></button>`).join('')||'<p class="sub" style="padding:10px 0">Geen resultaat.</p>'},220)};
+}
+function newWine(){
+  sheet(`<h2>Nieuwe wijn</h2>
+  <label class="f">Producent</label><input class="inp" id="nw_p">
+  <label class="f">Wijnnaam / cuvée *</label><input class="inp" id="nw_n">
+  <div class="row"><div style="flex:1"><label class="f">Jaargang</label><input class="inp" id="nw_j" inputmode="numeric" placeholder="bijv. 2021"></div>
+  <div style="flex:1"><label class="f">Land</label><input class="inp" id="nw_l"></div></div>
+  <label class="f">Regio</label><input class="inp" id="nw_r">
+  <label class="f">Druiven</label><input class="inp" id="nw_d">
+  <label class="f">Kleur *</label><div class="seg" id="nw_k">${KLEUREN.slice(0,4).map(k=>`<button>${k}</button>`).join('')}</div>
+  <button class="btn full" id="go">Verder</button>`);
+  let k=null;$('#nw_k').onclick=e=>{if(e.target.tagName==='BUTTON'){k=e.target.textContent;$('#nw_k').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target))}};
+  $('#go').onclick=async e=>{const n=$('#nw_n').value.trim();if(!n||!k)return toast('Vul wijnnaam en kleur in',1);
+    const j=parseInt($('#nw_j').value)||null,pr=$('#nw_p').value.trim()||null;
+    const dup=await q(sb.from('wijnen').select('wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,regio,land,etiketfoto_url').ilike('wijnnaam_cuvee',n).limit(5));
+    const d=dup.find(x=>(!j||x.jaargang===j)&&(!pr||(x.producent||'').toLowerCase()===pr.toLowerCase()));
+    if(d&&confirm(`Deze wijn bestaat al: ${naam(d)} ${d.jaargang||''}. Die gebruiken?`))return addForm(d);
+    e.target.disabled=true;
+    try{const [w]=await q(sb.from('wijnen').insert({producent:pr,wijnnaam_cuvee:n,jaargang:j,wijnkleur:k,land:$('#nw_l').value.trim()||null,regio:$('#nw_r').value.trim()||null,druiven:$('#nw_d').value.trim()||null,wijngegevens_bron:'App',validatiestatus:'Handmatig ingevoerd'}).select());addForm(w)}catch(err){e.target.disabled=false}};
+}
+function recZone(w){if(w.bewaarzone_advies&&ZONES.includes(w.bewaarzone_advies))return w.bewaarzone_advies;return ['Wit','Rosé','Mousserend'].includes(w.wijnkleur)?'8°C':'16°C'}
+async function addForm(w){
+  if(!S.vakken.length) try{S.vakken=await q(sb.from('voorraad_per_vak').select('*'))}catch(e){}
+  let n=1,z=recZone(w),r='Inventarisatie';
+  sheet(`<div class="hero">${lbl(w)}<div><h2>${esc(naam(w))}</h2><p class="sub">${esc(meta(w))}</p></div></div>
+  <label class="f">Aantal flessen</label><div class="stepper"><button id="mn">−</button><b id="nn">1</b><button id="pl">+</button></div>
+  <label class="f">Zone <span class="muted">(groen omrand = advies)</span></label><div class="seg" id="zs">${ZONES.map(x=>`<button data-z="${x}" class="${x===z?'on ':''}${x===recZone(w)?'rec':''}">${x}</button>`).join('')}</div>
+  <label class="f">Plank / vak (optioneel)</label><input class="inp" id="vk" list="vkl" placeholder="bijv. plank 3"><datalist id="vkl">${vakList()}</datalist>
+  <label class="f">Herkomst</label><div class="seg" id="rs"><button data-r="Inventarisatie" class="on">Lag al in huis</button><button data-r="Aankoop">Net gekocht</button></div>
+  <div id="ak" style="display:none"><div class="row"><div style="flex:1"><label class="f">Prijs per fles (€)</label><input class="inp" id="pr" inputmode="decimal"></div>
+  <div style="flex:1"><label class="f">Winkel</label><input class="inp" id="lv"></div></div></div>
+  <button class="btn full" id="go">Toevoegen aan kelder</button>`);
+  $('#mn').onclick=()=>{n=Math.max(1,n-1);$('#nn').textContent=n};$('#pl').onclick=()=>{n++;$('#nn').textContent=n};
+  $('#zs').onclick=e=>{if(e.target.dataset.z){z=e.target.dataset.z;$('#zs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target))}};
+  $('#rs').onclick=e=>{if(e.target.dataset.r){r=e.target.dataset.r;$('#rs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target));$('#ak').style.display=r==='Aankoop'?'':'none'}};
+  $('#go').onclick=async e=>{e.target.disabled=true;const vak=$('#vk').value.trim();
+    try{
+      if(r==='Aankoop'){const prijs=parseFloat(($('#pr').value||'').replace(',','.'))||null,lev=$('#lv').value.trim()||null;
+        const [a]=await q(sb.from('aankopen').insert({leverancier:lev}).select());
+        await q(sb.from('aankoopregels').insert({aankoop_id:a.aankoop_id,wijn_id:w.wijn_id,aantal:n,prijs_per_fles_eur:prijs,zone:z,vak}))}
+      await q(sb.from('voorraadmutaties').insert({wijn_id:w.wijn_id,aantal_delta:n,reden:r,zone:z,vak,verwerkt_door:S.ik}));
+      toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
+    }catch(err){e.target.disabled=false}};
+}
+start();
+</script>
+</body>
+</html>
