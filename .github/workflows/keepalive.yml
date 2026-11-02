@@ -1,0 +1,17 @@
+name: Supabase wakker houden
+# Twee keer per week (ma en do, 07:17 NL-tijd) een kleine vraag aan de database,
+# zodat het gratis Supabase-project niet op pauze gaat.
+on:
+  schedule:
+    - cron: '17 6 * * 1,4'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          curl -fsS "https://tjkdywtyssdhssnldmkn.supabase.co/rest/v1/bewaarzones?select=zone&limit=1" \
+            -H "apikey: sb_publishable_DO9L0-U5NC_YEjxiHZbVwg_-9BLF2Iz" \
+            -H "Authorization: Bearer sb_publishable_DO9L0-U5NC_YEjxiHZbVwg_-9BLF2Iz"
+          echo "Supabase bereikt op $(date)"
