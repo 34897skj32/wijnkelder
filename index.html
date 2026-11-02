@@ -156,7 +156,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 const ZONES=['8°C','10°C','16°C','18°C'];
 const ZNAAM={'8°C':'8°C klimaatkast','10°C':'10°C klimaatkast','16°C':'16°C klimaatkast','18°C':'18°C kelder'};
 const KLEUREN=['Rood','Wit','Rosé','Mousserend','Dessertwijn'];
-const COLS='wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,land,regio,regionale_stijl,druiven,etiketfoto_url,flesfoto_url,vivino_gemiddelde,likely_to_like_jeroen,likely_to_like_liz,match_betrouwbaarheid_jeroen,match_betrouwbaarheid_liz,voorraad,locaties,rating_jeroen,rating_liz,aantal_ratings_jeroen,aantal_ratings_liz,drinkstatus,bewaarzone_advies,validatiestatus,zone_advies,smaakmatch_jeroen,smaakmatch_liz,prijscategorie,prijs,prijs_indicatie_eur,laatste_prijs,advies_bron,stijlfamilie';
+const COLS='wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,land,regio,regionale_stijl,druiven,etiketfoto_url,flesfoto_url,vivino_gemiddelde,likely_to_like_jeroen,likely_to_like_liz,match_betrouwbaarheid_jeroen,match_betrouwbaarheid_liz,voorraad,locaties,rating_jeroen,rating_liz,aantal_ratings_jeroen,aantal_ratings_liz,drinkstatus,bewaarzone_advies,validatiestatus,zone_advies,smaakmatch,prijscategorie,drinkvenster_vanaf_jaar,drinkvenster_tot_jaar,beste_drinkmoment_vanaf,beste_drinkmoment_tot,prijs,prijs_indicatie_eur,laatste_prijs,advies_bron,stijlfamilie';
 const ls={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const S={ik:ls.get('ik','Jeroen'),tab:ls.get('tab','kelder'),groep:ls.get('groep','zone'),kleur:'',q:'',kelder:null,vakken:[],geproefd:null,ontdek:[],smaak:null,sort:'rating'};
 const $=s=>document.querySelector(s);
@@ -251,7 +251,11 @@ async function kelderView(){
   drawKelder();
 }
 const PRIO={'Over de top':0,'Nog net te drinken':1,'Nu perfect':2,'Drinkbaar':3,'Bijna op dronk':4,'Laten liggen':5};
-const ORD={smaak:['Voor mij','Misschien','Voor gasten','Onbekend'],prijs:['Goedkoop (< €8)','Normaal (€8–15)','Duur (€15–25)','Extreem duur (€25+)','Prijs onbekend']};
+const SM=c=>{const me=S.ik,o=me==='Liz'?'Jeroen':'Liz';return({J:me==='Jeroen'?'Voor mij':'Voor Jeroen',JL:'Voor mij & '+o,L:me==='Liz'?'Voor mij':'Voor Liz',G:'Voor gasten'})[c]||'Nog onbekend'};
+const FASE={'Over de top':'Voorbij het drinkvenster — zo snel mogelijk opdrinken','Nog net te drinken':'Piek is voorbij, nog binnen het venster — binnenkort drinken','Nu perfect':'In de optimale periode — nu drinken','Drinkbaar':'Binnen het drinkvenster; topperiode nog onbekend','Bijna op dronk':'Al drinkbaar of bijna, maar de top komt nog','Laten liggen':'Nog niet op dronk — laten rijpen','Nog geen drinkadvies':'Wordt ingevuld bij de verrijking'};
+function venster(w){if(!w.drinkvenster_vanaf_jaar&&!w.drinkvenster_tot_jaar)return'';const v=`venster ${w.drinkvenster_vanaf_jaar||'…'}–${w.drinkvenster_tot_jaar||'…'}`;
+  return v+(w.beste_drinkmoment_vanaf?` · top ${w.beste_drinkmoment_vanaf}${w.beste_drinkmoment_tot&&w.beste_drinkmoment_tot!==w.beste_drinkmoment_vanaf?'–'+w.beste_drinkmoment_tot:''}`:'')}
+const ORD={prijs:['Goedkoop (< €8)','Normaal (€8–15)','Duur (€15–25)','Extreem duur (€25+)','Prijs onbekend']};
 function drawKelder(){
   const ws=S.kelder.filter(match), tot=ws.reduce((a,w)=>a+w.voorraad,0);
   if(!S.kelder.length) return $('#main').innerHTML=`<div class="empty-state"><h3>Je kelder is nog leeg</h3>Tik op <b>+</b> om flessen toe te voegen die je nu in huis hebt.<br><br><button class="btn" onclick="addFlow()">Eerste fles toevoegen</button></div>`;
@@ -262,15 +266,16 @@ function drawKelder(){
   if(S.groep==='zone'){
     const W=Object.fromEntries(ws.map(w=>[w.wijn_id,w]));
     S.vakken.filter(v=>W[v.wijn_id]).forEach(v=>put(ZNAAM[v.zone]+(v.vak?' · '+v.vak:''),{w:W[v.wijn_id],n:v.aantal,z:v.zone}));
-  } else ws.forEach(w=>put(({kleur:w.wijnkleur,land:w.land,stijl:w.stijlfamilie||w.regionale_stijl||'Onbekende stijl',status:w.drinkstatus||'Nog geen drinkadvies',smaak:S.ik==='Liz'?w.smaakmatch_liz:w.smaakmatch_jeroen,prijs:w.prijscategorie})[S.groep]||'Onbekend',{w,n:w.voorraad}));
+  } else ws.forEach(w=>put(({kleur:w.wijnkleur,land:w.land,stijl:w.stijlfamilie||w.regionale_stijl||'Onbekende stijl',status:w.drinkstatus||'Nog geen drinkadvies',smaak:SM(w.smaakmatch),prijs:w.prijscategorie})[S.groep]||'Onbekend',{w,n:w.voorraad}));
   let keys=Object.keys(by);
   if(S.groep==='zone') keys.sort((a,b)=>ZONES.indexOf(by[a][0].z)-ZONES.indexOf(by[b][0].z)||a.localeCompare(b));
   else if(S.groep==='status') keys.sort((a,b)=>(PRIO[a]??9)-(PRIO[b]??9));
+  else if(S.groep==='smaak'){const o=['JL','J','L','G',null].map(SM);keys.sort((a,b)=>o.indexOf(a)-o.indexOf(b))}
   else if(ORD[S.groep]) keys.sort((a,b)=>ORD[S.groep].indexOf(a)-ORD[S.groep].indexOf(b)); else keys.sort();
   const nc=S.kelder.filter(w=>issues(w).length).length;
   $('#main').innerHTML=(nc?`<button class="sec" style="width:100%;text-align:left;margin:4px 0 6px;border-color:var(--bad)" onclick="S.groep='check';ls.set('groep','check');render()"><span class="iss" style="font-size:14px">⚠ ${nc} wijnen missen gegevens</span><span class="sub"> — tik om na te lopen</span></button>`:'')+`<p class="sub">${tot} flessen · ${ws.length} wijnen</p>`+keys.map(k=>{
     const it=by[k].sort((a,b)=>(PRIO[a.w.drinkstatus]??9)-(PRIO[b.w.drinkstatus]??9)||naam(a.w).localeCompare(naam(b.w)));
-    return `<div class="group"><h2>${esc(k)}</h2><span>${it.reduce((a,i)=>a+i.n,0)} fl.</span></div><div class="list">${cluster(it).map(cl=>gcard(cl)||card(cl[0].w,`<span class="cnt">${cl[0].n}×</span> ${S.groep!=='zone'?esc(cl[0].w.locaties||''):''} ${stag(cl[0].w.drinkstatus)}`)).join('')}</div>`}).join('');
+    return `<div class="group"><h2>${esc(k)}</h2><span>${it.reduce((a,i)=>a+i.n,0)} fl.</span></div>${S.groep==='status'&&FASE[k]?`<p class="sub" style="margin:-4px 0 8px">${FASE[k]}</p>`:''}<div class="list">${cluster(it).map(cl=>gcard(cl)||card(cl[0].w,`<span class="cnt">${cl[0].n}×</span> ${S.groep!=='zone'?esc(cl[0].w.locaties||''):''} ${stag(cl[0].w.drinkstatus)}${venster(cl[0].w)?`<br><span class="muted">${venster(cl[0].w)}</span>`:''}`)).join('')}</div>`}).join('');
 }
 
 function drawVerplaats(ws){
