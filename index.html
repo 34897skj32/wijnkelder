@@ -121,7 +121,7 @@ label.f{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
 .inp{width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);outline:none}
 textarea.inp{min-height:70px;resize:vertical}
 .seg{display:flex;gap:6px;flex-wrap:wrap}
-.seg button{flex:1;min-width:64px;padding:10px 8px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-weight:500;font-size:14px}
+.seg button{flex:1 1 auto;min-width:56px;white-space:nowrap;padding:10px 10px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-weight:500;font-size:14px}
 .seg button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .seg button.rec{border-color:var(--ok)}
 .stepper{display:flex;align-items:center;gap:14px}
@@ -166,8 +166,13 @@ const S={ik:ls.get('ik','Jeroen'),tab:ls.get('tab','kelder'),groep:ls.get('groep
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const f1=n=>n==null?'–':Number(n).toFixed(1);
+const LANDNL={France:'Frankrijk',Spain:'Spanje',Italy:'Italië',Germany:'Duitsland',Austria:'Oostenrijk',Portugal:'Portugal','South Africa':'Zuid-Afrika',Argentina:'Argentinië',Chile:'Chili','United States':'Verenigde Staten',Netherlands:'Nederland',Hungary:'Hongarije',Australia:'Australië','New Zealand':'Nieuw-Zeeland',Greece:'Griekenland',Slovenia:'Slovenië',Switzerland:'Zwitserland',Lebanon:'Libanon',Uruguay:'Uruguay',Croatia:'Kroatië',Georgia:'Georgië',Israel:'Israël',Romania:'Roemenië',Bulgaria:'Bulgarije',England:'Engeland',Canada:'Canada',Moldova:'Moldavië',Brazil:'Brazilië',Mexico:'Mexico',Belgium:'België',Luxembourg:'Luxemburg',Turkey:'Turkije',Morocco:'Marokko',Cyprus:'Cyprus',Slovakia:'Slowakije','Czech Republic':'Tsjechië',Denmark:'Denemarken',fr:'Frankrijk'};
+const landNL=l=>LANDNL[l]||l;
+const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const NLLAND=Object.fromEntries(Object.entries(LANDNL).map(([e,n])=>[norm(n),e]));
+const ilk=x=>x.replace(/[aeiouyàáâäãåèéêëìíîïòóôöõùúûüýç]/gi,'_');
 const naam=w=>[w.producent,w.wijnnaam_cuvee].filter(Boolean).join(' · ');
-const meta=w=>[w.jaargang,w.regio||w.land,w.wijnkleur].filter(Boolean).join(' · ');
+const meta=w=>[w.jaargang,w.regio||landNL(w.land),w.wijnkleur].filter(Boolean).join(' · ');
 function toast(m,err){const t=document.createElement('div');t.className='toast'+(err?' err':'');t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),err?5000:2200)}
 async function q(p){const {data,error}=await p;if(error){console.error(error);toast(error.message.replace(/^.*?: /,''),1);throw error}return data}
 const NLERR={'Onvoldoende':'Er ligt hier geen fles meer'};
@@ -179,11 +184,11 @@ function lbl(w,cls='lbl'){const a=imgs(w);const ini=esc((w.wijnkleur||'?')[0]);
   return `<div class="${cls}">${ini}${a.length?`<img loading="lazy" referrerpolicy="no-referrer" src="${esc(a[0])}" data-alt="${esc(a.slice(1).join('|'))}" alt="" onerror="nextImg(this)">`:''}</div>`}
 function sc(cls,v,lab){return `<div class="sc ${cls}${v==null?' empty':''}"><b>${f1(v)}</b><i>${lab}</i></div>`}
 function scores(w){
-  const own=w.rating_jeroen!=null||w.rating_liz!=null;
-  return `<div class="scores">${sc('j',w.rating_jeroen,'Jeroen')}${sc('l',w.rating_liz,'Liz')}${sc('v',w.vivino_gemiddelde,'Vivino')}${!own&&w.likely_to_like_jeroen!=null?sc('p',w.likely_to_like_jeroen,'Verwacht'):''}</div>`}
+  const mine=S.ik==='Liz'?w.rating_liz:w.rating_jeroen, pred=S.ik==='Liz'?w.likely_to_like_liz:w.likely_to_like_jeroen;
+  return `<div class="scores">${sc('j',w.rating_jeroen,'Jeroen')}${sc('l',w.rating_liz,'Liz')}${sc('v',w.vivino_gemiddelde,'Vivino')}${mine==null&&pred!=null?sc('p',pred,'Verwacht '+(S.ik==='Liz'?'L':'J')):''}</div>`}
 function stag(s){if(!s)return'';const c={'Nu perfect':'best','Bijna op dronk':'','Nog net te drinken':'nu','Over de top':'over'}[s]||'';return `<span class="tag ${c}">${esc(s)}</span>`}
 const wkey=w=>((w.producent||'')+'|'+(w.wijnnaam_cuvee||'')).toLowerCase().replace(/\s+/g,' ').trim();
-const metaNV=w=>[w.regio||w.land,w.wijnkleur].filter(Boolean).join(' · ');
+const metaNV=w=>[w.regio||landNL(w.land),w.wijnkleur].filter(Boolean).join(' · ');
 function cluster(items){const m=new Map();items.forEach(i=>{const k=wkey(i.w);if(!m.has(k))m.set(k,[]);m.get(k).push(i)});return [...m.values()].map(c=>c.sort((a,b)=>(b.w.jaargang||0)-(a.w.jaargang||0)))}
 function gcard(cl,mode){if(cl.length===1)return null;
   const p=(cl.find(i=>i.w.rating_jeroen!=null||i.w.rating_liz!=null)||cl[0]).w, tot=cl.reduce((a,i)=>a+(i.n||0),0);
@@ -240,18 +245,16 @@ function filterbar(placeholder,groups){
   <div class="chips">${['',...KLEUREN].map(k=>`<button class="chip ${S.kleur===k?'on':''}" onclick="S.kleur='${k}';render()">${k||'Alles'}</button>`).join('')}</div>
   ${groups||''}`}
 let rt;function refresh(){clearTimeout(rt);rt=setTimeout(()=>({kelder:drawKelder,geproefd:()=>S.sort==='gedronken'?gedronkenView():drawGeproefd(),ontdek:ontdekSearch})[S.tab]?.(),180)}
-const match=w=>(!S.kleur||w.wijnkleur===S.kleur)&&(!S.q||(naam(w)+' '+meta(w)+' '+(w.druiven||'')+' '+(w.regionale_stijl||'')).toLowerCase().includes(S.q.toLowerCase()));
+const match=w=>{if(S.kleur&&w.wijnkleur!==S.kleur)return false;if(!S.q)return true;const t=norm([naam(w),w.jaargang,w.regio,w.land,landNL(w.land),w.wijnkleur,w.druiven,w.regionale_stijl,w.stijlfamilie].join(' '));return norm(S.q).split(/\s+/).filter(Boolean).every(x=>t.includes(x))};
 
 /* ---------- kelder ---------- */
 async function kelderView(){
-  const G={zone:'Zone',status:'Drinkmoment',smaak:'Smaakmatch',prijs:'Prijs',verplaats:'↔ Verplaatsen',kleur:'Kleur',land:'Land',stijl:'Stijl',check:'⚠ Controleren'};
+  const G={zone:'Zone',status:'Drinkmoment',smaak:'Smaakmatch',prijs:'Prijs',kleur:'Kleur',land:'Land',stijl:'Stijl'};
   $('#hsub').innerHTML=filterbar('Zoek in kelder…',`<div class="chips">${Object.entries(G).map(([k,l])=>`<button class="chip ${S.groep===k?'on':''}" onclick="S.groep='${k}';ls.set('groep','${k}');drawKelder();this.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===this))">${l}</button>`).join('')}</div>`);
   if(!S.kelder){
     const [w,v,z]=await Promise.all([q(sb.from('wijn_overzicht').select(COLS).gt('voorraad',0)),q(sb.from('voorraad_per_vak').select('*')),q(sb.from('bewaarzones').select('zone,capaciteit'))]);
     S.kelder=w;S.vakken=v;S.cap=Object.fromEntries(z.map(x=>[x.zone,x.capaciteit]));
   }
-  const nc=S.kelder.filter(w=>issues(w).length).length;
-  document.querySelectorAll('#hsub .chip').forEach(c=>{if(c.textContent.startsWith('⚠'))c.textContent='⚠ Controleren ('+nc+')'});
   drawKelder();
 }
 const PRIO={'Over de top':0,'Nog net te drinken':1,'Nu perfect':2,'Drinkbaar':3,'Bijna op dronk':4,'Laten liggen':5};
@@ -264,33 +267,40 @@ function drawKelder(){
   const ws=S.kelder.filter(match), tot=ws.reduce((a,w)=>a+w.voorraad,0);
   if(!S.kelder.length) return $('#main').innerHTML=`<div class="empty-state"><h3>Je kelder is nog leeg</h3>Tik op <b>+</b> om flessen toe te voegen die je nu in huis hebt.<br><br><button class="btn" onclick="addFlow()">Eerste fles toevoegen</button></div>`;
   if(S.groep==='check'){const iw=ws.filter(w=>issues(w).length);
-    return $('#main').innerHTML=iw.length?`<p class="sub">${iw.length} wijnen om na te lopen. Tik erop en kies <b>Gegevens bewerken</b>; na opslaan verdwijnt de wijn uit deze lijst. Ontbreekt er een fles helemaal? Voeg hem toe met <b>+</b>.</p><div class="list" style="margin-top:8px">${iw.map(w=>card(w,`<span class="iss">⚠ ${issues(w).join(' · ')}</span>`)).join('')}</div>`:'<div class="empty-state"><h3>Alles is gecontroleerd</h3>Geen ontbrekende gegevens in je kelder.</div>'}
+    return $('#main').innerHTML=terug('Controleren')+(iw.length?`<p class="sub">${iw.length} wijnen om na te lopen. Tik erop en kies <b>Gegevens bewerken</b>; na opslaan verdwijnt de wijn uit deze lijst. Ontbreekt er een fles helemaal? Voeg hem toe met <b>+</b>.</p><div class="list" style="margin-top:8px">${iw.map(w=>card(w,`<span class="iss">⚠ ${issues(w).join(' · ')}</span>`)).join('')}</div>`:'<div class="empty-state"><h3>Alles is gecontroleerd</h3>Geen ontbrekende gegevens in je kelder.</div>')}
   if(S.groep==='verplaats') return drawVerplaats(ws);
   const by={};const put=(k,item)=>(by[k]=by[k]||[]).push(item);
   if(S.groep==='zone'){
     const W=Object.fromEntries(ws.map(w=>[w.wijn_id,w]));
     S.vakken.filter(v=>W[v.wijn_id]).forEach(v=>put(ZNAAM[v.zone]+(v.vak?' · '+v.vak:''),{w:W[v.wijn_id],n:v.aantal,z:v.zone}));
-  } else ws.forEach(w=>put(({kleur:w.wijnkleur,land:w.land,stijl:w.stijlfamilie||w.regionale_stijl||'Onbekende stijl',status:w.drinkstatus||'Nog geen drinkadvies',smaak:SM(w.smaakmatch),prijs:w.prijscategorie})[S.groep]||'Onbekend',{w,n:w.voorraad}));
+  } else ws.forEach(w=>put(({kleur:w.wijnkleur,land:landNL(w.land)||'Onbekend',stijl:w.stijlfamilie||w.regionale_stijl||'Onbekende stijl',status:w.drinkstatus||'Nog geen drinkadvies',smaak:SM(w.smaakmatch),prijs:w.prijscategorie})[S.groep]||'Onbekend',{w,n:w.voorraad}));
   let keys=Object.keys(by);
   if(S.groep==='zone') keys.sort((a,b)=>ZONES.indexOf(by[a][0].z)-ZONES.indexOf(by[b][0].z)||a.localeCompare(b));
   else if(S.groep==='status') keys.sort((a,b)=>(PRIO[a]??9)-(PRIO[b]??9));
   else if(S.groep==='smaak'){const o=['JL','J','L','G',null].map(SM);keys.sort((a,b)=>o.indexOf(a)-o.indexOf(b))}
   else if(ORD[S.groep]) keys.sort((a,b)=>ORD[S.groep].indexOf(a)-ORD[S.groep].indexOf(b)); else keys.sort();
-  const nc=S.kelder.filter(w=>issues(w).length).length;
-  $('#main').innerHTML=(nc?`<button class="sec" style="width:100%;text-align:left;margin:4px 0 6px;border-color:var(--bad)" onclick="S.groep='check';ls.set('groep','check');render()"><span class="iss" style="font-size:14px">⚠ ${nc} wijnen missen gegevens</span><span class="sub"> — tik om na te lopen</span></button>`:'')+`<p class="sub">${tot} flessen · ${ws.length} wijnen</p>`+keys.map(k=>{
+  $('#main').innerHTML=todoBox()+`<p class="sub">${tot} flessen · ${ws.length} wijnen</p>`+keys.map(k=>{
     const it=by[k].sort((a,b)=>(PRIO[a.w.drinkstatus]??9)-(PRIO[b.w.drinkstatus]??9)||naam(a.w).localeCompare(naam(b.w)));
     return `<div class="group"><h2>${esc(k)}</h2><span>${it.reduce((a,i)=>a+i.n,0)} fl.</span></div>${S.groep==='status'&&FASE[k]?`<p class="sub" style="margin:-4px 0 8px">${FASE[k]}</p>`:''}<div class="list">${cluster(it).map(cl=>gcard(cl)||card(cl[0].w,`<span class="cnt">${cl[0].n}×</span> ${S.groep!=='zone'?esc(cl[0].w.locaties||''):''} ${stag(cl[0].w.drinkstatus)}${venster(cl[0].w)?`<br><span class="muted">${venster(cl[0].w)}</span>`:''}`)).join('')}</div>`}).join('');
 }
 
+function nVerplaats(){const W=Object.fromEntries(S.kelder.map(w=>[w.wijn_id,w]));return S.vakken.filter(v=>W[v.wijn_id]?.zone_advies&&W[v.wijn_id].zone_advies!==v.zone).reduce((a,v)=>a+v.aantal,0)}
+function todoBox(){const nv=nVerplaats(),nc=S.kelder.filter(w=>issues(w).length).length,today=new Date().toISOString().slice(0,10);
+  if((!nv&&!nc)||ls.get('todo_hide','')===today+':'+nv+':'+nc)return'';
+  return `<div class="sec" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:10px 12px;margin:4px 0 8px;position:relative;padding-right:46px"><b style="font-size:14px;white-space:nowrap">Te doen</b>
+  ${nv?`<button class="chip" onclick="S.groep='verplaats';drawKelder();scrollTo(0,0)">↔ ${nv} verplaatsen</button>`:''}
+  ${nc?`<button class="chip" onclick="S.groep='check';drawKelder();scrollTo(0,0)">⚠ ${nc} controleren</button>`:''}
+  <button class="x" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);margin:0;width:30px;height:30px;font-size:14px" aria-label="Verbergen" onclick="ls.set('todo_hide','${today}:${nv}:${nc}');this.parentNode.remove()">✕</button></div>`}
+function terug(t){return `<button class="chip" style="margin:6px 0 4px" onclick="S.groep=ls.get('groep','zone');if(['check','verplaats'].includes(S.groep))S.groep='zone';render()">← Terug naar kelder</button><h2 style="font-size:20px;margin:6px 0 4px">${t}</h2>`}
 function drawVerplaats(ws){
   const W=Object.fromEntries(ws.map(w=>[w.wijn_id,w]));const occ={},after={};
   S.vakken.forEach(v=>{occ[v.zone]=(occ[v.zone]||0)+v.aantal});Object.assign(after,occ);
   const mv=S.vakken.filter(v=>W[v.wijn_id]&&W[v.wijn_id].zone_advies&&W[v.wijn_id].zone_advies!==v.zone).map(v=>({v,w:W[v.wijn_id]}));
   mv.forEach(m=>{after[m.v.zone]-=m.v.aantal;after[m.w.zone_advies]=(after[m.w.zone_advies]||0)+m.v.aantal});
-  if(!mv.length) return $('#main').innerHTML='<div class="empty-state"><h3>Alles ligt goed</h3>Elke fles ligt in de geadviseerde zone.</div>';
+  if(!mv.length) return $('#main').innerHTML=terug('Verplaatsen')+'<div class="empty-state"><h3>Alles ligt goed</h3>Elke fles ligt in de geadviseerde zone.</div>';
   const occRow=ZONES.map(z=>{const c=S.cap?.[z],o=after[z]||0;return `<div class="srow"><span>${ZNAAM[z]}</span><span style="color:${c&&o>c?'var(--bad)':'inherit'}">nu ${occ[z]||0} → na advies ${o}${c?' / '+c:''}</span></div>`}).join('');
   const by={};mv.forEach(m=>(by[m.w.zone_advies]=by[m.w.zone_advies]||[]).push(m));
-  $('#main').innerHTML=`<div class="sec"><h3>Bezetting per zone</h3>${occRow}<p class="sub" style="margin-top:6px">Rood = past niet. Begin dan bovenaan de lijst: wat het dichtst bij zijn piek of eroverheen is, gaat voor.</p></div>`+
+  $('#main').innerHTML=terug('Verplaatsen')+`<div class="sec"><h3>Bezetting per zone</h3>${occRow}<p class="sub" style="margin-top:6px">Rood = past niet. Begin dan bovenaan de lijst: wat het dichtst bij zijn piek of eroverheen is, gaat voor.</p></div>`+
   ZONES.filter(z=>by[z]).map(z=>`<div class="group"><h2>Naar ${ZNAAM[z]}</h2><span>${by[z].reduce((a,m)=>a+m.v.aantal,0)} fl.</span></div><div class="list">${by[z].sort((a,b)=>(PRIO[a.w.drinkstatus]??9)-(PRIO[b.w.drinkstatus]??9)).map(m=>card(m.w,`<span class="cnt">${m.v.aantal}×</span> nu: ${esc(m.v.zone)}${m.v.vak?' · '+esc(m.v.vak):''} ${stag(m.w.drinkstatus)}`)).join('')}</div>`).join('');
 }
 
@@ -338,7 +348,7 @@ async function ontdekView(){
 async function ontdekSearch(){
   let p=sb.from('wijn_overzicht').select(COLS);
   const t=S.q.trim().replace(/[,()%]/g,' ');
-  if(t) t.split(/\s+/).forEach(x=>{p=/^\d{4}$/.test(x)?p.eq('jaargang',+x):p.or(`producent.ilike.%${x}%,wijnnaam_cuvee.ilike.%${x}%,regio.ilike.%${x}%,regionale_stijl.ilike.%${x}%,land.ilike.%${x}%,druiven.ilike.%${x}%`)});
+  if(t) t.split(/\s+/).filter(Boolean).forEach(x=>{const L=NLLAND[norm(x)];const y=ilk(x);p=/^\d{4}$/.test(x)?p.eq('jaargang',+x):p.or(`producent.ilike.%${y}%,wijnnaam_cuvee.ilike.%${y}%,regio.ilike.%${y}%,regionale_stijl.ilike.%${y}%,land.ilike.%${L||y}%,druiven.ilike.%${y}%`)});
   if(S.kleur) p=p.eq('wijnkleur',S.kleur);
   const col=S.ik==='Liz'?'likely_to_like_liz':'likely_to_like_jeroen';
   const ws=await q(p.order(col,{ascending:false,nullsFirst:false}).limit(60));
@@ -402,7 +412,8 @@ async function detail(id){
   ${issues(w).length?`<p class="iss" style="margin-top:8px">⚠ ${issues(w).join(' · ')} — tik onderaan op Gegevens bewerken</p>`:''}
   <div class="big-scores">${bs('j',w.rating_jeroen,'Jeroen')}${bs('l',w.rating_liz,'Liz')}${bs('v',w.vivino_gemiddelde,'Vivino')}${bs('p',pred,'Verwacht')}</div>
   ${pred!=null?`<p class="sub">Verwacht = geschat cijfer voor ${S.ik==='Liz'?'Liz':'jou'}${betr?` · betrouwbaarheid ${esc(betr.toLowerCase())}`:''}${w.match_toelichting?` — ${esc(w.match_toelichting)}`:''}</p>`:''}
-  <div class="row" style="margin-top:12px"><button class="btn" style="flex:1" onclick="rateFlow('${id}')">Beoordelen</button><button class="btn sec2" style="flex:1" onclick="addFlow('${id}')">+ Flessen</button></div>
+  ${vak.length?`<button class="btn full" style="font-size:16px;padding:14px" onclick="pickDrink()">🍷 Fles gedronken</button>`:''}
+  <div class="row" style="margin-top:10px"><button class="btn ${vak.length?'sec2':''}" style="flex:1" onclick="rateFlow('${id}')">Beoordelen${vak.length?' zonder af te boeken':''}</button><button class="btn sec2" style="flex:1" onclick="addFlow('${id}')">+ Flessen</button></div>
   ${sib.length>1?`<div class="sec"><h3>Jaargangen</h3>${sib.map(s=>`<div class="vrow ${s.wijn_id===id?'cur':''}" onclick="detail('${s.wijn_id}')"><span>${s.jaargang||'NV'}${s.voorraad?` · ${s.voorraad}× in kelder`:''}</span><span>${s.rating_jeroen!=null?'J '+f1(s.rating_jeroen):''}${s.rating_liz!=null?' · L '+f1(s.rating_liz):''}${s.rating_jeroen==null&&s.rating_liz==null?'<span class="muted">niet geproefd</span>':''}</span></div>`).join('')}</div>`:''}
   <div class="sec"><h3>In de kelder${w.voorraad?` · ${w.voorraad} fl.`:''}</h3>
    ${vak.length?vak.map((v,i)=>`<div class="loc"><div><b>${v.aantal}×</b> ${esc(ZNAAM[v.zone])}${v.vak?' · '+esc(v.vak):''}${w.zone_advies&&w.zone_advies!==v.zone?`<br><span class="iss">↔ advies: ${esc(w.zone_advies)}</span>`:''}</div><div class="row"><button class="btn sm sec2" onclick="fixFlow(${i})" title="Aantal corrigeren">±</button><button class="btn sm sec2" onclick="moveFlow(${i})">Verplaats</button><button class="btn sm" onclick="drinkFlow(${i})">Drinken</button></div></div>`).join(''):'<p class="muted">Niet op voorraad.</p>'}
@@ -461,9 +472,11 @@ function drinkFlow(i){const v=S.cur.vak[i],w=S.cur.w;
     try{const dm=await q(sb.rpc('fles_drinken',{p_wijn:w.wijn_id,p_zone:v.zone,p_vak:v.vak||'',p_door:S.ik,p_gelegenheid:$('#gel').value||null,p_gerecht:$('#ger').value||null}));
       invalidate();toast('1 fles afgeboekt');rateFlow(w.wijn_id,dm)}catch(err){e.target.disabled=false}};
 }
-function rateBlock(p){return `<div class="rate ${p}" data-p="${p}"><div class="rate-h"><h3>${p}</h3><span class="rate-n">–</span></div>
-  <input type="range" min="1" max="5" step="0.1" value="3.5" oninput="this.closest('.rate').querySelector('.rate-n').textContent=(+this.value).toFixed(1);this.closest('.rate').dataset.set=1">
-  <div class="tl-lab"><span>1</span><span>3</span><span>5</span></div>
+function pickDrink(){const v=S.cur.vak;if(v.length===1)return drinkFlow(0);
+  sheet(`<h2>Uit welk vak?</h2><p class="sub">${esc(naam(S.cur.w))} ${S.cur.w.jaargang||''}</p>${v.map((x,i)=>`<button class="res" onclick="drinkFlow(${i})"><div><b>${x.aantal}× ${esc(ZNAAM[x.zone])}${x.vak?' · '+esc(x.vak):''}</b></div></button>`).join('')}`)}
+function rateBlock(p){return `<div class="rate ${p}" data-p="${p}"><div class="rate-h"><h3>${p}</h3><span><span class="rate-n" style="font-size:18px;color:var(--muted)">geen cijfer</span> <button class="btn sm sec2" style="display:none" onclick="const r=this.closest('.rate');delete r.dataset.set;const n=r.querySelector('.rate-n');n.textContent='geen cijfer';n.style.cssText='font-size:18px;color:var(--muted)';this.style.display='none'">wis</button></span></div>
+  <input type="range" min="1" max="5" step="0.1" value="3.5" oninput="const r=this.closest('.rate'),n=r.querySelector('.rate-n');n.textContent=(+this.value).toFixed(1);n.style.cssText='';r.dataset.set=1;r.querySelector('.rate-h .btn').style.display=''">
+  <div class="tl-lab"><span>1</span><span>3</span><span>5</span></div><p class="sub" style="margin-top:2px">Schuif om een cijfer te geven (stappen van 0,1).</p>
   <label class="f">Waarom dit cijfer?</label><textarea class="inp nt" placeholder="Wat proef je, wat viel op? (dicteren via toetsenbord kan ook)"></textarea>
   <label class="f">Opnieuw kopen?</label><div class="seg ok">${['ja','misschien','nee'].map(x=>`<button onclick="this.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this&&!b.classList.contains('on')))">${x}</button>`).join('')}</div></div>`}
 function rateFlow(id,dm){const w=S.cur?.w;
@@ -474,7 +487,7 @@ function rateFlow(id,dm){const w=S.cur?.w;
     const rows=[...document.querySelectorAll('.rate')].filter(b=>b.dataset.set||b.querySelector('.nt').value.trim()).map(b=>({
       wijn_id:id,persoon:b.dataset.p,eigen_rating:b.dataset.set?+b.querySelector('input').value:null,
       eigen_proefnotitie:b.querySelector('.nt').value.trim()||null,opnieuw_kopen:b.querySelector('.seg .on')?.textContent||null,
-      drinkmoment_id:dm||null,drinkdatum_bevestigd:new Date().toISOString().slice(0,10),bron:'App'}));
+      drinkmoment_id:dm||null,drinkdatum_bevestigd:dm?new Date().toISOString().slice(0,10):null,bron:'App'}));
     if(!rows.length){closeSheet();render();return}
     e.target.disabled=true;
     try{await q(sb.from('proefnotities').insert(rows));toast('Beoordeling opgeslagen');invalidate();closeSheet();render();detail(id)}catch(err){e.target.disabled=false}};
@@ -528,7 +541,7 @@ function addFlow(id){
   <button class="btn sec2 full" onclick="newWine()">Staat er niet tussen → nieuwe wijn</button>`);
   let t;$('#as').oninput=e=>{clearTimeout(t);t=setTimeout(async()=>{const v=e.target.value.trim().replace(/[,()%]/g,' ');if(v.length<2)return $('#ar').innerHTML='';
     let p=sb.from('wijnen').select('wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,regio,land,etiketfoto_url,flesfoto_url,bewaarzone_advies');
-    v.split(/\s+/).forEach(x=>{p=/^\d{4}$/.test(x)?p.eq('jaargang',+x):p.or(`producent.ilike.%${x}%,wijnnaam_cuvee.ilike.%${x}%`)});
+    v.split(/\s+/).filter(Boolean).forEach(x=>{const y=ilk(x);p=/^\d{4}$/.test(x)?p.eq('jaargang',+x):p.or(`producent.ilike.%${y}%,wijnnaam_cuvee.ilike.%${y}%`)});
     const r=await q(p.order('jaargang',{ascending:false,nullsFirst:false}).limit(20));S.addRes=r;
     $('#ar').innerHTML=r.map((w,i)=>`<button class="res" onclick="addForm(S.addRes[${i}])">${lbl(w)}<div><b>${esc(naam(w))}</b><div class="cmeta">${esc(meta(w))}</div></div></button>`).join('')||'<p class="sub" style="padding:10px 0">Geen resultaat.</p>'},220)};
 }
@@ -540,14 +553,20 @@ function newWine(){
   <div style="flex:1"><label class="f">Land</label><input class="inp" id="nw_l"></div></div>
   <label class="f">Regio</label><input class="inp" id="nw_r">
   <label class="f">Druiven</label><input class="inp" id="nw_d">
-  <label class="f">Kleur *</label><div class="seg" id="nw_k">${KLEUREN.slice(0,4).map(k=>`<button>${k}</button>`).join('')}</div>
+  <label class="f">Kleur *</label><div class="seg" id="nw_k">${KLEUREN.map(k=>`<button>${k}</button>`).join('')}</div>
   <button class="btn full" id="go">Verder</button>`);
   let k=null;$('#nw_k').onclick=e=>{if(e.target.tagName==='BUTTON'){k=e.target.textContent;$('#nw_k').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target))}};
   $('#go').onclick=async e=>{const n=$('#nw_n').value.trim();if(!n||!k)return toast('Vul wijnnaam en kleur in',1);
     const j=parseInt($('#nw_j').value)||null,pr=$('#nw_p').value.trim()||null;
-    const dup=await q(sb.from('wijnen').select('wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,regio,land,etiketfoto_url').ilike('wijnnaam_cuvee',n).limit(5));
-    const d=dup.find(x=>(!j||x.jaargang===j)&&(!pr||(x.producent||'').toLowerCase()===pr.toLowerCase()));
-    if(d&&confirm(`Deze wijn bestaat al: ${naam(d)} ${d.jaargang||''}. Die gebruiken?`))return addForm(d);
+    if(!e.target.dataset.force){
+      const words=norm((pr||'')+' '+n).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(x=>x.length>=4&&!['chateau','domaine','bodegas','weingut','cuvee','reserve'].includes(x)).sort((x,y)=>y.length-x.length).slice(0,2);
+      let cand=[];for(const wd of words){const y=ilk(wd);cand=cand.concat(await q(sb.from('wijnen').select('wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,regio,land,etiketfoto_url').or(`producent.ilike.%${y}%,wijnnaam_cuvee.ilike.%${y}%`).limit(30)))}
+      const key=norm((pr||'')+' '+n).replace(/[^a-z0-9]/g,'');
+      const hits=[...new Map(cand.map(c=>[c.wijn_id,c])).values()].map(c=>{const k=norm(naam(c)).replace(/[^a-z0-9]/g,'');let s=words.filter(wd=>k.includes(wd)).length*2;if(j&&c.jaargang===j)s+=2;if(k.includes(norm(n).replace(/[^a-z0-9]/g,''))||key.includes(k))s+=3;return {c,s}}).filter(h=>h.s>=3).sort((x,y)=>y.s-x.s).slice(0,5);
+      if(hits.length){S.dups=hits.map(h=>h.c);
+        $('#sh .sheet').insertAdjacentHTML('beforeend',`<div class="sec" id="dupbox" style="border-color:var(--warn)"><h3>Bestaat deze wijn al?</h3>${S.dups.map((c,i)=>`<button class="res" onclick="addForm(S.dups[${i}])">${lbl(c)}<div><b>${esc(naam(c))}</b><div class="cmeta">${esc(meta(c))}</div></div></button>`).join('')}<p class="sub" style="margin-top:8px">Tik op de juiste wijn, of druk nog een keer op <b>Verder</b> om toch een nieuwe aan te maken.</p></div>`);
+        e.target.dataset.force=1;$('#dupbox').scrollIntoView({behavior:'smooth'});return}
+    }
     e.target.disabled=true;
     try{const [w]=await q(sb.from('wijnen').insert({producent:pr,wijnnaam_cuvee:n,jaargang:j,wijnkleur:k,land:$('#nw_l').value.trim()||null,regio:$('#nw_r').value.trim()||null,druiven:$('#nw_d').value.trim()||null,wijngegevens_bron:'App',validatiestatus:'Handmatig ingevoerd'}).select());addForm(w)}catch(err){e.target.disabled=false}};
 }
@@ -575,7 +594,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-02d';
+const VERSIE='2026-11-02e';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
