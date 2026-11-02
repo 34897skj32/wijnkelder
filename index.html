@@ -334,7 +334,35 @@ async function detail(id){
   ${prof.length?`<div class="sec"><h3>Smaakprofiel</h3>${prof.map(([k,v])=>`<div class="bar">${k}<div><span style="width:${v*20}%"></span></div></div>`).join('')}${w.houtgebruik?`<p class="sub">Hout: ${esc(w.houtgebruik)}</p>`:''}</div>`:''}
   <div class="sec"><h3>Proefnotities</h3>${notes.length?notes.map(n=>`<div class="note ${n.persoon}"><b>${esc(n.persoon)} · ${f1(n.eigen_rating)}</b>${n.opnieuw_kopen?` · opnieuw kopen: ${esc(n.opnieuw_kopen)}`:''}<div>${esc(n.eigen_proefnotitie||'')}</div><small>${esc(n.drinkdatum_bevestigd||n.review_kalenderdatum||(n.aangemaakt||'').slice(0,10))} · ${esc(n.bron)}</small></div>`).join(''):'<p class="muted">Nog niet geproefd.</p>'}</div>
   ${muts.length?`<div class="sec"><h3>Laatste mutaties</h3>${muts.map(m=>`<div class="mut"><span>${new Date(m.datumtijd).toLocaleDateString('nl-NL')} · ${esc(m.reden)} ${m.aantal_delta>0?'+':''}${m.aantal_delta} · ${esc(m.zone)}${m.vak?' '+esc(m.vak):''}</span>${['Inventarisatie','Aankoop','Gedronken'].includes(m.reden)&&!muts.some(x=>x.correctie_van_mutatie_id===m.mutatie_id)?`<button class="btn sm sec2" onclick="corrigeer('${m.mutatie_id}')">Ongedaan</button>`:''}</div>`).join('')}</div>`:''}
+  <button class="btn sec2 full" onclick="editWine()">✎ Gegevens bewerken</button>
   ${w.vivino_url?`<p style="text-align:center;margin-top:14px"><a class="sub" href="${esc(w.vivino_url)}" target="_blank" rel="noopener">Bekijk op Vivino ↗</a></p>`:''}`;
+}
+/* ---------- wijn bewerken ---------- */
+const EF=[['producent','Producent'],['wijnnaam_cuvee','Wijnnaam / cuvée'],['jaargang','Jaargang'],['land','Land'],['regio','Regio'],['druiven','Druiven']];
+function editWine(){const w=S.cur.w;
+  sheet(`<h2>Gegevens bewerken</h2><p class="sub">${esc(naam(w))}</p>
+  ${EF.map(([k,l])=>`<label class="f">${l}</label><input class="inp" id="e_${k}" value="${esc(w[k]??'')}" ${k==='jaargang'?'inputmode="numeric"':''}>`).join('')}
+  <label class="f">Kleur</label><div class="seg" id="e_k">${KLEUREN.map(k=>`<button class="${w.wijnkleur===k?'on':''}">${k}</button>`).join('')}</div>
+  <button class="btn full" id="go">Opslaan</button>`);
+  $('#e_k').onclick=e=>{if(e.target.tagName==='BUTTON')$('#e_k').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target))};
+  $('#go').onclick=async e=>{
+    const v={};EF.forEach(([k])=>{const x=$('#e_'+k).value.trim();v[k]=k==='jaargang'?(parseInt(x)||null):(x||null)});
+    v.wijnkleur=$('#e_k .on')?.textContent||w.wijnkleur;
+    if(!v.wijnnaam_cuvee)return toast('Wijnnaam is verplicht',1);
+    e.target.disabled=true;
+    try{
+      // Andere jaargang bij een wijn met beoordelingen: oude jaargang intact laten, nieuwe aanmaken en voorraad overzetten
+      if(v.jaargang!==w.jaargang&&(w.aantal_ratings_jeroen||w.aantal_ratings_liz)&&confirm(`Deze wijn heeft beoordelingen van jaargang ${w.jaargang||'onbekend'}. Wil je jaargang ${v.jaargang||'onbekend'} als aparte wijn aanmaken en de flessen in de kelder daarheen overzetten?`)){
+        const base=Object.fromEntries(['producent','wijnnaam_cuvee','wijnkleur','land','regio','regionale_stijl','druiven','etiketfoto_url','vivino_url'].map(k=>[k,w[k]]));
+        const [nw]=await q(sb.from('wijnen').insert({...base,...v,wijngegevens_bron:'App',validatiestatus:'Nieuwe jaargang van '+w.wijn_id}).select());
+        const r=crypto.randomUUID?crypto.randomUUID():null;
+        const m=S.cur.vak.flatMap(x=>[{wijn_id:w.wijn_id,aantal_delta:-x.aantal,reden:'Correctie',zone:x.zone,vak:x.vak||'',referentie_id:r,verwerkt_door:S.ik,toelichting:'Jaargang gecorrigeerd'},{wijn_id:nw.wijn_id,aantal_delta:x.aantal,reden:'Correctie',zone:x.zone,vak:x.vak||'',referentie_id:r,verwerkt_door:S.ik,toelichting:'Jaargang gecorrigeerd'}]);
+        if(m.length)await q(sb.from('voorraadmutaties').insert(m));
+        toast('Nieuwe jaargang aangemaakt');invalidate();render();return detail(nw.wijn_id);
+      }
+      await q(sb.from('wijnen').update(v).eq('wijn_id',w.wijn_id));
+      toast('Opgeslagen');invalidate();render();detail(w.wijn_id);
+    }catch(err){e.target.disabled=false}};
 }
 async function corrigeer(m){if(!confirm('Deze mutatie ongedaan maken? Er wordt een correctie vastgelegd.'))return;
   try{await q(sb.rpc('mutatie_corrigeren',{p_mutatie:m,p_door:S.ik}));toast('Gecorrigeerd');invalidate();detail(S.cur.w.wijn_id);render()}catch(e){}}
