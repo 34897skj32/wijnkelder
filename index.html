@@ -25,8 +25,10 @@
   --wine:#e0707f; --wine-soft:#3d2228; --liz:#6cc0b7; --liz-soft:#1e3533;
   --viv:#c9b98f; --viv-soft:#332d22; --pred:#e0a85a; --shadow:none;}}
 *{box-sizing:border-box;margin:0;padding:0}
+html,body{overflow-x:hidden;max-width:100%}
 body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);-webkit-font-smoothing:antialiased;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
 button,input,select,textarea{font:inherit;color:inherit}
+input,select,textarea{font-size:16px!important}
 button{cursor:pointer;border:0;background:none}
 h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:-.01em}
 header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(10px + env(safe-area-inset-top)) 16px 8px}
@@ -45,16 +47,16 @@ main{padding:4px 16px 20px;max-width:760px;margin:0 auto}
 .group{margin:18px 0 8px;display:flex;align-items:baseline;justify-content:space-between}
 .group h2{font-size:18px}
 .group span{color:var(--muted);font-size:13px}
-.list{display:grid;gap:10px}
-@media(min-width:700px){.list{grid-template-columns:1fr 1fr}}
-.card{display:flex;gap:12px;background:var(--card);border-radius:var(--r);padding:12px;box-shadow:var(--shadow);border:1px solid var(--line);text-align:left;width:100%}
+.list{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
+@media(min-width:700px){.list{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.card{display:flex;gap:12px;min-width:0;overflow:hidden;background:var(--card);border-radius:var(--r);padding:12px;box-shadow:var(--shadow);border:1px solid var(--line);text-align:left;width:100%}
 .lbl{width:62px;height:84px;flex:none;border-radius:10px;background:var(--wine-soft) center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:22px;color:var(--wine);overflow:hidden;position:relative}
 .lbl img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--card)}
 .cbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .cname{font-family:var(--serif);font-size:16px;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .cmeta{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .crow{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto}
-.scores{display:flex;gap:5px}
+.scores{display:flex;gap:5px;flex-wrap:wrap}
 .sc{min-width:42px;padding:3px 6px 2px;border-radius:9px;text-align:center;line-height:1.1}
 .sc b{display:block;font-size:15px;font-weight:600}
 .sc i{font-style:normal;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;opacity:.8}
@@ -79,8 +81,10 @@ nav .plus{width:52px;height:52px;border-radius:50%;background:var(--wine);color:
 nav .plus svg{width:26px;height:26px}
 /* sheet */
 .sheet-bg{position:fixed;inset:0;background:rgba(20,10,12,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center;animation:fade .15s}
-.sheet{background:var(--bg);width:100%;max-width:640px;max-height:92vh;overflow-y:auto;border-radius:22px 22px 0 0;padding:8px 16px calc(24px + env(safe-area-inset-bottom));animation:up .2s ease-out}
+.sheet{background:var(--bg);width:100%;max-width:640px;max-height:92vh;overflow-y:auto;overflow-x:hidden;position:relative;border-radius:22px 22px 0 0;padding:8px 16px calc(24px + env(safe-area-inset-bottom));animation:up .2s ease-out}
 .grab{width:40px;height:4px;border-radius:4px;background:var(--line);margin:4px auto 10px}
+.x{position:sticky;top:0;float:right;margin:-2px -4px 0 8px;width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--line);font-size:18px;line-height:1;color:var(--muted);z-index:2}
+.hero h2,.cname,.sheet h2{overflow-wrap:anywhere}
 @keyframes up{from{transform:translateY(30px);opacity:.5}}@keyframes fade{from{opacity:0}}
 .hero{display:flex;gap:14px;align-items:flex-start}
 .hero .lbl{width:92px;height:126px}
@@ -105,7 +109,7 @@ nav .plus svg{width:26px;height:26px}
 .tl-lab{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
 .bar{display:grid;grid-template-columns:70px 1fr;align-items:center;gap:8px;font-size:13px;margin:4px 0}
 .bar div{height:6px;border-radius:6px;background:var(--line);overflow:hidden}.bar div span{display:block;height:100%;background:var(--wine)}
-.loc{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
+.loc{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line)}
 .loc:first-of-type{border-top:0}
 .btn{padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;background:var(--wine);color:#fff;text-align:center}
 .btn.sec2{background:var(--card);color:var(--ink);border:1px solid var(--line)}
@@ -364,7 +368,7 @@ async function smaakView(){
 
 /* ---------- sheet helpers ---------- */
 function sheet(html){closeSheet();const bg=document.createElement('div');bg.className='sheet-bg';bg.id='sh';
-  bg.innerHTML=`<div class="sheet"><div class="grab"></div>${html}</div>`;bg.onclick=e=>{if(e.target===bg)closeSheet()};document.body.appendChild(bg);document.body.style.overflow='hidden'}
+  bg.innerHTML=`<div class="sheet"><button class="x" onclick="closeSheet()" aria-label="Sluiten">✕</button><div class="grab"></div>${html}</div>`;bg.onclick=e=>{if(e.target===bg)closeSheet()};document.body.appendChild(bg);document.body.style.overflow='hidden'}
 function closeSheet(){$('#sh')?.remove();document.body.style.overflow=''}
 function invalidate(){S.kelder=null;S.geproefd=null;S.smaak=null;S.gedronken=null}
 
@@ -392,7 +396,7 @@ async function detail(id){
     <div class="tl-now" style="left:${pc(y)}"></div></div><div class="tl-lab"><span>${a}</span><span>nu: ${stag(w.drinkstatus)}</span><span>${b}</span></div>
     ${w.beste_drinkmoment_vanaf?`<p class="sub">Op zijn best: ${w.beste_drinkmoment_vanaf}–${w.beste_drinkmoment_tot||''}</p>`:''}`}
   const prof=[['Body',w.body],['Zuren',w.zuren],['Tannines',w.tannines],['Fruit',w.fruit]].filter(x=>x[1]);
-  $('#sh .sheet').innerHTML=`<div class="grab"></div>
+  $('#sh .sheet').innerHTML=`<button class="x" onclick="closeSheet()" aria-label="Sluiten">✕</button><div class="grab"></div>
   <div class="hero">${lbl(w)}<div style="flex:1;min-width:0"><h2>${esc(naam(w))}</h2><p class="sub">${esc([w.jaargang,w.regio,w.land].filter(Boolean).join(' · '))}</p>
    <p class="sub">${esc([w.wijnkleur,w.druiven,w.stijlfamilie||w.regionale_stijl].filter(Boolean).join(' · '))}</p></div></div>
   ${issues(w).length?`<p class="iss" style="margin-top:8px">⚠ ${issues(w).join(' · ')} — tik onderaan op Gegevens bewerken</p>`:''}
@@ -571,10 +575,11 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-02c';
+const VERSIE='2026-11-02d';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkUpdate()});
 checkUpdate();
 start();
