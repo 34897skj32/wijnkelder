@@ -679,7 +679,8 @@ async function scan(f,modus){if(!f)return;
   sheet(`<div class="empty-state"><h3>${modus==='pakbon'?'Claude leest de bon…':'Claude leest de etiketten…'}</h3>Dit duurt meestal 5–15 seconden.</div>`);
   try{const {b64,blob}=await fotoNaarBase64(f,modus==='pakbon'?2000:1600);
     const {data,error}=await sb.functions.invoke('scan-etiket',{body:{image:b64,mime:'image/jpeg',modus}});
-    if(error||data?.fout)throw new Error(data?.fout||error.message);
+    if(error){let msg=error.message;try{const st=error.context?.status;const b=await error.context.json();msg=(b.fout||b.msg||b.message||b.error||msg)+(st?` (status ${st})`:'')}catch(e){try{msg+=' (status '+error.context.status+')'}catch(_){}}throw new Error(msg)}
+    if(data?.fout)throw new Error(data.fout);
     const items=(data.flessen||[]).map(x=>({...x,aantal:Math.max(1,+x.aantal||1),keuze:'nieuw',kand:[]}));
     if(!items.length){closeSheet();return toast('Geen wijn herkend op deze foto',1)}
     S.scan={modus,items,leverancier:data.leverancier||'',datum:data.datum||null,blob,onleesbaar:data.onleesbaar||0,herkomst:modus==='pakbon'?'Aankoop':'Inventarisatie',vak:''};
@@ -782,7 +783,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-03f';
+const VERSIE='2026-11-03g';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
