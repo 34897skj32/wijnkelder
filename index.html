@@ -604,7 +604,7 @@ async function detail(id){
   ${prof.length?`<div class="sec"><h3>Smaakprofiel</h3>${prof.map(([k,v])=>`<div class="bar">${k}<div><span style="width:${v*20}%"></span></div></div>`).join('')}${w.houtgebruik?`<p class="sub">Hout: ${esc(w.houtgebruik)}</p>`:''}</div>`:''}
   <div class="sec"><h3>Proefnotities</h3>${notes.length?notes.map(n=>`<div class="note ${n.persoon}"><b>${esc(n.persoon)} · ${f1(n.eigen_rating)}</b>${n.opnieuw_kopen?` · opnieuw kopen: ${esc(n.opnieuw_kopen)}`:''}<div>${esc(n.eigen_proefnotitie||'')}</div>${n.persoonlijke_notitie?`<small>${esc(n.persoonlijke_notitie)}</small>`:''}${PK.some(([k])=>n['proef_'+k])?`<small>${PK.filter(([k])=>n['proef_'+k]).map(([k,l])=>l+' '+n['proef_'+k]).join(' · ')}</small>`:''}<small>${esc(n.drinkdatum_bevestigd||n.review_kalenderdatum||(n.aangemaakt||'').slice(0,10))} · ${esc(n.bron)}</small></div>`).join(''):'<p class="muted">Nog niet geproefd.</p>'}</div>
   ${muts.length?`<div class="sec"><h3>Laatste mutaties</h3>${muts.map(m=>`<div class="mut"><span>${new Date(m.datumtijd).toLocaleDateString('nl-NL')} · ${esc(m.reden)} ${m.aantal_delta>0?'+':''}${m.aantal_delta} · ${esc(m.zone)}${m.vak?' '+esc(m.vak):''}</span>${['Inventarisatie','Aankoop','Gedronken'].includes(m.reden)&&!muts.some(x=>x.correctie_van_mutatie_id===m.mutatie_id)?`<button class="btn sm sec2" onclick="corrigeer('${m.mutatie_id}')">Ongedaan</button>`:''}</div>`).join('')}</div>`:''}
-  <div class="row" style="margin-top:14px"><button class="btn sec2" style="flex:1" onclick="editWine()">✎ Gegevens bewerken</button><button class="btn sec2" style="flex:1" onclick="vraagControle()">${w.controle_gevraagd?'✓ Controle gevraagd':'🔎 Laat controleren'}</button><label class="btn sec2" style="flex:1;cursor:pointer">📷 Foto<input type="file" accept="image/*" capture="environment" hidden onchange="uploadFoto(this.files[0])"></label></div>
+  <div class="row" style="margin-top:14px"><button class="btn sec2" style="flex:1" onclick="editWine()">✎ Gegevens bewerken</button><button class="btn sec2" style="flex:1" id="aanv" onclick="aanvullen()">🔎 Aanvullen via internet</button><label class="btn sec2" style="flex:1;cursor:pointer">📷 Foto<input type="file" accept="image/*" capture="environment" hidden onchange="uploadFoto(this.files[0])"></label></div>
   <div class="sec"><h3>Betrouwbaarheid</h3>${w.niveau?`<p class="sub"><b>Niveau ${w.niveau} · ${['','instap','standaard','réserve / cru','top'][w.niveau]}</b>${w.niveau_bron?' — '+esc(w.niveau_bron):''}</p>`:''}${w.jaargang_score?`<p class="sub"><b>Jaargang ${w.jaargang}:</b> ${f1(w.jaargang_score).replace('.0','')}/100${w.jaargang_advies?' · '+({hold:'laten liggen',drink_or_hold:'drinken of laten liggen',drink:'nu drinken',past:'over zijn top'}[w.jaargang_advies]||w.jaargang_advies):''} (jaargangkaarten)</p>`:''}<p class="sub">Advies: ${esc(w.advies_bron||'nog niet verrijkt')}${w.vivino_aantal?` · Vivino ${f1(w.vivino_gemiddelde)} uit ${w.vivino_aantal} beoordelingen`:''}${w.geverifieerd_op?` · gecontroleerd ${new Date(w.geverifieerd_op).toLocaleDateString('nl-NL')}`:' · nog niet gecontroleerd'}</p>${w.verificatie_bronnen?`<p class="sub" style="margin-top:4px;overflow-wrap:anywhere">${esc(w.verificatie_bronnen).replace(/(https?:\/\/[^\s·]+)/g,'<a href="$1" target="_blank" rel="noopener">bron ↗</a>')}</p>`:''}</div>
   ${w.vivino_url?`<p style="text-align:center;margin-top:14px"><a class="sub" href="${esc(w.vivino_url)}" target="_blank" rel="noopener">Bekijk op Vivino ↗</a></p>`:''}`;
   lijktOp(w);
@@ -740,10 +740,35 @@ async function exportVerrijking(){
   try{await navigator.clipboard.writeText(txt);toast(`${todo.length} wijnen gekopieerd — plak in de chat met Claude`)}
   catch(e){sheet(`<h2>Kopieer deze tekst</h2><textarea class="inp" style="min-height:50vh">${esc(txt)}</textarea>`)}
 }
+/* ---------- A9: aanvullen via internet ---------- */
+async function verrijk(id,modus='volledig'){const {data,error}=await sb.functions.invoke('verrijk-wijn',{body:{wijn_id:id,modus}});
+  if(error){let msg=error.message;try{const b=await error.context.json();msg=b.fout||b.message||msg}catch(e){}throw new Error(msg)}
+  if(data?.fout)throw new Error(data.fout);return data}
+async function naRekenen(){try{await sb.rpc('pas_drinkregels_toe');await sb.rpc('voorspel_smaak')}catch(e){}S.kelder=null}
+async function aanvullen(){const w=S.cur.w,btn=$('#aanv');if(btn){btn.disabled=true;btn.textContent='Claude zoekt… (±20–40 s)'}
+  try{const r=await verrijk(w.wijn_id,'volledig');await naRekenen();invalidate();
+    toast(r.gevonden?.length?'Gevonden: '+r.gevonden.join(' · '):(r.velden?.length?`${r.velden.length} gegevens aangevuld`:'Niets nieuws gevonden'));detail(w.wijn_id)}
+  catch(e){toast('Aanvullen mislukt: '+(e.message||e),1);if(btn){btn.disabled=false;btn.textContent='🔎 Aanvullen via internet'}}}
+async function verrijkNieuw(ids){if(!ids.length)return;let ok=0;
+  for(const id of ids){try{await verrijk(id,'volledig');ok++}catch(e){console.warn(e)}}
+  await naRekenen();invalidate();toast(`${ok} nieuwe wijn${ok===1?'':'en'} aangevuld via internet`);if(S.tab==='kelder')render()}
+function prijsKandidaten(){const grens=[8,15,25];
+  return (S.kelder||[]).filter(w=>w.laatste_prijs==null&&(!w.prijs_bron||/^schatting/i.test(w.prijs_bron||''))&&!/klein flesje/i.test(w.prijs_bron||'')&&!/\bmini\b/i.test(w.wijnnaam_cuvee||'')).map(w=>{const p=+w.prijs||0;
+    const d=Math.min(...grens.map(g=>Math.abs(p-g)/g));return {w,s:(p>=20?2:0)+(d<.15?2:0)+(w.voorraad>1?1:0)+(p?0:1)}}).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,40).map(x=>x.w)}
+async function prijsronde(){if(!S.kelder){toast('Open eerst even de kelder',1);return}
+  const ws=prijsKandidaten();if(!ws.length)return toast('Geen wijnen met alleen een geschatte prijs die ertoe doet');
+  if(!confirm(`${ws.length} wijnen: winkelprijs opzoeken via internet. Kost ongeveer €${(ws.length*.05).toFixed(0)}–${(ws.length*.08).toFixed(0)} aan API-gebruik en duurt ±${Math.ceil(ws.length/3*25/60)} minuten. Laat de app open. Doorgaan?`))return;
+  sheet(`<h2>Prijsronde</h2><p class="sub" id="prs">0 / ${ws.length}</p><div class="fill"><span id="prb" style="width:0%"></span></div><div id="prl" style="margin-top:8px;font-size:13px"></div>`);
+  let i=0,klaar=0,gev=0;const log=t=>{const el=$('#prl');if(el)el.insertAdjacentHTML('afterbegin',`<div>${t}</div>`)};
+  const werk=async()=>{while(i<ws.length){const w=ws[i++];try{const r=await verrijk(w.wijn_id,'prijs');const g=(r.gevonden||[]).filter(x=>/^prijs/.test(x));if(g.length)gev++;log(`${esc(naam(w))} ${w.jaargang||''}: ${g.length?g.join(', '):'<span class="muted">niet gevonden</span>'}`)}catch(e){log(`${esc(naam(w))}: <span style="color:var(--bad)">${esc(e.message||e)}</span>`)}
+    klaar++;const s=$('#prs');if(s)s.textContent=`${klaar} / ${ws.length} · ${gev} prijzen gevonden`;const b=$('#prb');if(b)b.style.width=(klaar/ws.length*100)+'%'}};
+  await Promise.all([werk(),werk(),werk()]);await naRekenen();invalidate();
+  const s=$('#prs');if(s)s.textContent=`Klaar: ${gev} van ${ws.length} prijzen gevonden. Prijsgroepen, niveaus en drinkvensters zijn opnieuw berekend.`}
 async function vraagControle(){const w=S.cur.w;try{await q(sb.from('wijnen').update({controle_gevraagd:!w.controle_gevraagd}).eq('wijn_id',w.wijn_id));
   toast(w.controle_gevraagd?'Controleverzoek ingetrokken':'Gemarkeerd — gaat mee met "Kopieer voor verrijking"');detail(w.wijn_id)}catch(e){}}
 function beheer(){sheet(`<h2>Beheer</h2>
   <div class="sec"><h3>Kelder verrijken</h3><p class="sub">Kopieert alle kelderwijnen die nog niet verrijkt zijn, gewijzigd zijn of die je liet controleren. Plak de tekst in de chat met Claude; je krijgt één SQL-bestand terug.</p><button class="btn full" onclick="exportVerrijking()">Kopieer voor verrijking</button></div>
+  <div class="sec"><h3>Prijsronde</h3><p class="sub">Zoekt via internet de winkelprijs op van de kelderwijnen waar nu alleen een schatting staat en waar de prijs ertoe doet (dure flessen, of vlak bij een prijsgrens). Max. 40 per keer, ±€0,05–0,08 per wijn.</p><button class="btn sec2 full" onclick="closeSheet();prijsronde()">💶 Prijsronde starten</button></div>
   <div class="sec"><h3>Drinkvensters</h3><p class="sub">Rekent drinkvenster en topperiode opnieuw uit op basis van jaargang, streek, druif en prijs (stijlregels). Eigen notities en bronnen van producenten blijven staan.</p><button class="btn sec2 full" onclick="herbereken()">Drinkvensters herberekenen</button></div>
   <div class="sec"><h3>Smaakmodel</h3><p class="sub">Verwachte cijfers van Jeroen worden berekend uit zijn eigen beoordelingen (vergelijkbare wijnen, Vivino-niveau, niveau en jaargang). Dit gebeurt automatisch na elke beoordeling; hier kun je het handmatig doen.</p><button class="btn sec2 full" onclick="sb.rpc('voorspel_smaak').then(r=>{toast((r.data||0)+' wijnen herberekend');invalidate();render()})">Smaakmodel herberekenen</button></div>
   <div class="sec"><h3>Versie</h3><p class="sub">App-versie ${VERSIE}</p><button class="btn sec2 full" onclick="sb.auth.signOut().then(()=>location.reload())">Uitloggen</button></div>`)}
@@ -842,8 +867,8 @@ async function scanOpslaan(){const s=S.scan,btn=$('#scanGo');btn.disabled=true;b
       if(ak)await q(sb.from('aankoopregels').insert({aankoop_id:ak.aankoop_id,wijn_id:wid,aantal:it.aantal,prijs_per_fles_eur:it.prijs_per_fles||null,zone,vak:s.vak||''}));
       await q(sb.from('voorraadmutaties').insert({wijn_id:wid,aantal_delta:it.aantal,reden:s.herkomst,zone,vak:s.vak||'',verwerkt_door:S.ik,toelichting:s.modus==='pakbon'?'Pakbon-scan':'Etiketscan'}));n+=it.aantal}
     if(s.modus==='etiket'&&s.items.length===1&&nieuw.length===1){try{const path=`${nieuw[0]}-${Date.now()}.jpg`;const {error}=await sb.storage.from('fotos').upload(path,s.blob,{contentType:'image/jpeg'});if(!error)await sb.from('wijnen').update({flesfoto_url:sb.storage.from('fotos').getPublicUrl(path).data.publicUrl}).eq('wijn_id',nieuw[0])}catch(e){}}
-    sb.rpc('pas_drinkregels_toe').then(()=>sb.rpc('voorspel_smaak')).then(()=>{S.kelder=null});
-    toast(`${n} fles${n===1?'':'sen'} toegevoegd${nieuw.length?` · ${nieuw.length} nieuwe wijn${nieuw.length>1?'en':''} (gemarkeerd voor controle)`:''}`);
+    if(nieuw.length)verrijkNieuw(nieuw);else naRekenen();
+    toast(`${n} fles${n===1?'':'sen'} toegevoegd${nieuw.length?` · ${nieuw.length} nieuwe wijn${nieuw.length>1?'en':''} worden aangevuld via internet`:''}`);
     invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
   }catch(e){btn.disabled=false;btn.textContent='Opnieuw proberen'}}
 function newWine(){
@@ -895,7 +920,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-04c';
+const VERSIE='2026-11-04d';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
