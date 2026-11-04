@@ -387,7 +387,7 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
   const inOV=u=>{const k=KI[OPENVAK(u.w)];return k&&u.cz===k.zone&&inVak(u.cv,k)};
   [true,false].forEach(eerst=>units.forEach(u=>{if(!u.open&&openN[u.w.wijn_id]>0&&(!eerst||inOV(u))){u.open=true;openN[u.w.wijn_id]--}}));
   units.sort((a,b)=>(b.open-a.open)||ord[a.f]-ord[b.f]||(PRIO[a.w.drinkstatus]??3)-(PRIO[b.w.drinkstatus]??3)||(b.w.prijs||0)-(a.w.prijs||0)||a.w.wijn_id.localeCompare(b.w.wijn_id));
-  const vrij=Object.fromEntries(KV.map(k=>[k.vak_id,k.capaciteit])),gezet=new Set(),inZone={};
+  const vrij=Object.fromEntries(KV.map(k=>[k.vak_id,k.capaciteit])),gezet=new Set(),inZone={},vVoor={};
   for(const u of units){
     let k=null;
     if(u.open)k=KI[OPENVAK(u.w)];
@@ -403,7 +403,9 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
     const al=gezet.has(k.vak_id+'|'+u.w.wijn_id);
     u.k=k;vrij[k.vak_id]--;gezet.add(k.vak_id+'|'+u.w.wijn_id);inZone[k.zone+'|'+u.w.wijn_id]=(inZone[k.zone+'|'+u.w.wijn_id]||0)+1;
     // voorin één fles per wijn (eerst op bovenaan); achterin bewaarwijn, tweede flessen en Coravin-flessen
-    u.pos=u.open?(openM[u.w.wijn_id]==='Coravin'?'achter':'voor'):u.f==='bewaar'||al?'achter':'voor'}
+    u.pos=u.open?(openM[u.w.wijn_id]==='Coravin'?'achter':'voor'):u.f==='bewaar'||al?'achter':'voor';
+    // vol voorin (bijv. toonplank 5 flessen)? dan erachter
+    if(u.pos==='voor'&&k.cap_voor!=null){vVoor[k.vak_id]=(vVoor[k.vak_id]||0)+1;if(vVoor[k.vak_id]>k.cap_voor){u.pos='achter';vVoor[k.vak_id]--}}}
   // bewaarplanken (kelder): voorin wat het eerst op dronk komt, achterin de rest
   KV.filter(k=>(k.fase||'').startsWith('bewaar')).forEach(k=>{const us=units.filter(u=>u.k===k).sort((a,b)=>(a.w.beste_drinkmoment_vanaf||9999)-(b.w.beste_drinkmoment_vanaf||9999));us.forEach((u,i)=>u.pos=i<Math.ceil(us.length/2)?'voor':'achter')});
   units.forEach(u=>{if(u.k){u.doel=plek(u.k,u.pos);u.hier=u.cz===u.k.zone&&u.cv===u.doel}});
@@ -952,7 +954,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-04g';
+const VERSIE='2026-11-04h';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
