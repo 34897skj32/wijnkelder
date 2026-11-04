@@ -439,31 +439,33 @@ async function ladeKlaar(id,btn){const P=kastPlan(),g={};
 
 /* ---------- open flessen / Coravin (B13) ---------- */
 function houdbaar(w,o){const port=/port|banyuls|maury|madeira|sherry|marsala/i.test([w.regio,w.wijnnaam_cuvee,w.regionale_stijl].join(' '));
+  if(o.methode==='Coravin-schroefdop')return 45;
   if(o.methode==='Coravin')return w.wijnkleur==='Mousserend'?2:port?365:90;
   return port?30:w.wijnkleur==='Dessertwijn'?14:w.wijnkleur==='Mousserend'?2:w.wijnkleur==='Rood'?((w.body||3)>=4||(w.tannines||2)>=4?5:3):4}
 function openInfo(w,o){const d=Math.floor((Date.now()-new Date(o.geopend_op))/864e5),h=houdbaar(w,o),rest=h-d;
   const kl=rest<0?'var(--bad)':rest<=1?'var(--warn)':'var(--ok)';
-  const txt=o.methode==='Coravin'?(rest<0?'al lang aangeprikt: eerst even proeven':rest>60?'blijft nog maanden goed':`nog ±${Math.round(rest/7)||1} weken goed`):(rest<0?'waarschijnlijk over zijn best':rest===0?'vandaag opmaken':`nog ±${rest} dag${rest>1?'en':''} goed`);
-  return {d,txt,kl,lbl:`${o.methode==='Coravin'?'Coravin':'kurk eruit'} · ${d?d+' dag'+(d>1?'en':'')+' geleden':'vandaag'} · ${o.glazen} gla${o.glazen>1?'zen':'s'}`}}
+  const txt=/^Coravin/.test(o.methode)?(rest<0?'al lang aangeprikt: eerst even proeven':rest>60?'blijft nog maanden goed':`nog ±${Math.round(rest/7)||1} weken goed`):(rest<0?'waarschijnlijk over zijn best':rest===0?'vandaag opmaken':`nog ±${rest} dag${rest>1?'en':''} goed`);
+  return {d,txt,kl,lbl:`${{Coravin:'Coravin','Coravin-schroefdop':'Coravin · schroefdop',Kurk:'kurk eruit'}[o.methode]||o.methode} · ${d?d+' dag'+(d>1?'en':'')+' geleden':'vandaag'} · ${o.glazen} gla${o.glazen>1?'zen':'s'}`}}
 function openBlok(){const os=S.open||[];if(!os.length)return'';const W=Object.fromEntries(S.kelder.map(w=>[w.wijn_id,w]));
   return `<div class="sec" style="padding:10px 12px;margin:4px 0 8px"><b style="font-size:14px">🫗 Open flessen</b>${os.map(o=>{const w=W[o.wijn_id];if(!w)return'';const i=openInfo(w,o);
     return `<div class="ofl" onclick="detail('${w.wijn_id}')"><span>${esc(naam(w))} ${w.jaargang||''}<br><span class="muted" style="font-size:12px">${esc(i.lbl)}</span></span><span style="color:${i.kl};font-size:13px;text-align:right">${esc(i.txt)}</span></div>`}).join('')}</div>`}
 function openSectie(w){const o=(S.open||[]).find(x=>x.wijn_id===w.wijn_id);if(!o)return'';const i=openInfo(w,o);
-  return `<div class="sec"><h3>🫗 Open fles</h3><p class="sub">${esc(i.lbl)} · <b style="color:${i.kl}">${esc(i.txt)}</b>${o.methode==='Coravin'&&w.wijnkleur==='Mousserend'?' · Coravin is niet geschikt voor bubbels (behalve Coravin Sparkling)':''}</p>
+  return `<div class="sec"><h3>🫗 Open fles</h3><p class="sub">${esc(i.lbl)} · <b style="color:${i.kl}">${esc(i.txt)}</b>${/^Coravin/.test(o.methode)&&w.wijnkleur==='Mousserend'?' · Coravin is niet geschikt voor bubbels (behalve Coravin Sparkling)':''}</p>
   <div class="row" style="margin-top:8px"><button class="btn sm sec2" style="flex:1" onclick="glasErbij(${o.open_id},${o.glazen})">+1 glas</button><button class="btn sm" style="flex:1" onclick="flesLeeg(${o.open_id})">Fles leeg · afboeken</button></div></div>`}
 function openFlow(){const w=S.cur.w;let m='Coravin';
   sheet(`<h2>Fles openen</h2><p class="sub">${esc(naam(w))} ${w.jaargang||''}</p>
-  <label class="f">Hoe?</label><div class="seg" id="om"><button data-m="Coravin" class="on">Coravin (kurk blijft erin)</button><button data-m="Kurk">Kurk eruit</button></div>
+  <label class="f">Hoe?</label><div class="seg" id="om"><button data-m="Coravin" class="on">Coravin · kurk</button><button data-m="Coravin-schroefdop">Coravin · schroefdop</button></div><p class="sub" style="margin-top:4px">Toch de kurk eruit? <button class="chip" data-m="Kurk" onclick="this.closest('.sheet').querySelector('#om').dispatchEvent(new CustomEvent('kies',{detail:'Kurk'}))">Kurk eruit</button></p>
   <p class="sub" id="oh" style="margin-top:6px"></p>
   <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px"><input type="checkbox" id="omv" checked> Leg hem in het vak open flessen (${w.wijnkleur==='Rood'?'rood: 16°C toonvak':'wit/rosé/bubbels: 10°C bodem'})</label>
   <button class="btn full" id="go" style="margin-top:14px">Openen · eerste glas</button>`);
-  const hint=()=>{const h=houdbaar(w,{methode:m});$('#oh').textContent=m==='Coravin'?(w.wijnkleur==='Mousserend'?'Let op: een gewone Coravin werkt niet bij bubbels.':`Blijft ${h>=365?'een jaar of langer':'maanden'} goed; de fles blijft gewoon in de voorraad tot hij leeg is.`):`Daarna nog ±${h} dag${h>1?'en':''} goed (koel en dicht bewaren).`};hint();
-  $('#om').onclick=e=>{if(e.target.dataset.m){m=e.target.dataset.m;$('#om').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target));hint()}};
+  const hint=()=>{const h=houdbaar(w,{methode:m});$('#oh').textContent=m==='Coravin'?(w.wijnkleur==='Mousserend'?'Let op: een gewone Coravin werkt niet bij bubbels.':`Blijft ${h>=365?'een jaar of langer':'maanden'} goed; de fles blijft gewoon in de voorraad tot hij leeg is.`):m==='Coravin-schroefdop'?'Met de Coravin-schroefdop: binnen 1–2 maanden opdrinken.':`Kurk eruit: daarna nog ±${h} dag${h>1?'en':''} goed (koel en dicht bewaren).`};hint();
+  const kies=x=>{m=x;$('#om').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.m===x));hint()};
+  $('#om').onclick=e=>{if(e.target.dataset.m)kies(e.target.dataset.m)};$('#om').addEventListener('kies',e=>kies(e.detail));
   $('#go').onclick=async e=>{e.target.disabled=true;
     try{await q(sb.from('open_flessen').insert({wijn_id:w.wijn_id,methode:m,door:S.ik}));
       const k=(S.kv||[]).find(x=>x.vak_id===OPENVAK(w));
       if($('#omv').checked&&k&&!S.cur.vak.some(v=>v.zone===k.zone&&inVak(v.vak,k))){const v=S.cur.vak[0];
-        await q(sb.rpc('fles_verplaatsen',{p_wijn:w.wijn_id,p_van_zone:v.zone,p_van_vak:v.vak||'',p_naar_zone:k.zone,p_naar_vak:plek(k,m==='Coravin'&&k.vak_id==='16°C-T'?'achter':'voor'),p_aantal:1,p_door:S.ik}))}
+        await q(sb.rpc('fles_verplaatsen',{p_wijn:w.wijn_id,p_van_zone:v.zone,p_van_vak:v.vak||'',p_naar_zone:k.zone,p_naar_vak:plek(k,m==='Coravin'?'achter':'voor'),p_aantal:1,p_door:S.ik}))}
       toast('Geopend — proost!');invalidate();await kelderView();detail(w.wijn_id)}catch(err){e.target.disabled=false}}}
 async function glasErbij(id,n){await q(sb.from('open_flessen').update({glazen:n+1,laatst_glas:new Date().toISOString()}).eq('open_id',id));const w=S.cur.w;invalidate();await kelderView();detail(w.wijn_id)}
 async function flesLeeg(id){await q(sb.from('open_flessen').update({leeg_op:new Date().toISOString()}).eq('open_id',id));S.open=(S.open||[]).filter(o=>o.open_id!==id);
@@ -954,7 +956,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-04h';
+const VERSIE='2026-11-04i';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
