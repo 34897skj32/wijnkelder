@@ -155,6 +155,7 @@ input[type=range]{width:100%;margin:12px 0 4px;accent-color:var(--wine)}
 .muted{color:var(--muted)}
 .mut{font-size:13px;display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
 .lade{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;box-shadow:var(--shadow)}
+.lade.todo{border-left:4px solid var(--warn)}.badge{background:var(--warn);color:#fff;border-radius:99px;padding:1px 8px;font-size:12px;font-weight:600}
 .lade h4{margin:0;font-size:14px;display:flex;justify-content:space-between;gap:8px}.lade h4 small{color:var(--muted);font-weight:400}
 .lade .lab{font-size:12px;color:var(--muted);margin:2px 0 6px}.lade .pos{font-size:11px;color:var(--muted);margin:6px 0 2px;text-transform:uppercase;letter-spacing:.04em}
 .fill{height:4px;border-radius:2px;background:var(--line);margin:6px 0}.fill span{display:block;height:100%;border-radius:2px;background:var(--ok)}.fill.vol span{background:var(--bad)}
@@ -342,10 +343,11 @@ function gerechtTop(g){const r=GERECHT[g],me=S.ik==='Liz'?'liz':'jeroen',re=new 
     return {w,t,s,hit}}).sort((a,b)=>b.s-a.s).slice(0,5);
   $('#gtop').innerHTML=`<div class="group"><h2>${esc(g)}</h2></div><p class="sub" style="margin-bottom:8px">Zoek naar: ${r.w}.</p><div class="list">${res.map(o=>card(o.w,`${o.hit?'<span class="tag best">klassieke combinatie</span> ':''}${stag(o.w.drinkstatus)}<br><span class="muted">📍 ${esc((o.w.locaties||'').split(',')[0].replace(/ \(\d+\)$/,''))}</span>`)).join('')||'<div class="empty-state">Niets passends in je kelder</div>'}</div>`;
   $('#gtop').scrollIntoView({behavior:'smooth'})}
-function todoBox(){const nv=nVerplaats(),nc=S.kelder.filter(w=>issues(w).length).length,today=new Date().toISOString().slice(0,10);
+function nHerschik(){try{const P=S.kv?.length?kastPlan():null;return P?P.units.filter(u=>!u.hier).length:0}catch(e){return 0}}
+function todoBox(){const nh=nHerschik(),nv=nh||nVerplaats(),nc=S.kelder.filter(w=>issues(w).length).length,today=new Date().toISOString().slice(0,10);
   if((!nv&&!nc)||ls.get('todo_hide','')===today+':'+nv+':'+nc)return'';
   return `<div class="sec" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:10px 12px;margin:4px 0 8px;position:relative;padding-right:46px"><b style="font-size:14px;white-space:nowrap">Te doen</b>
-  ${nv?`<button class="chip" onclick="S.groep=S.kv?.length?'kaart':'verplaats';drawKelder();scrollTo(0,0)">↔ ${nv} naar andere zone</button>`:''}
+  ${nv?`<button class="chip" onclick="S.groep=S.kv?.length?'kaart':'verplaats';S.kalleen=true;render();scrollTo(0,0)">🗺 ${nv} fles${nv===1?'':'sen'} herschikken</button>`:''}
   ${nc?`<button class="chip" onclick="S.groep='check';drawKelder();scrollTo(0,0)">⚠ ${nc} controleren</button>`:''}
   <button class="x" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);margin:0;width:30px;height:30px;font-size:14px" aria-label="Verbergen" onclick="ls.set('todo_hide','${today}:${nv}:${nc}');this.parentNode.remove()">✕</button></div>`}
 function terug(t){return `<button class="chip" style="margin:6px 0 4px" onclick="S.groep=ls.get('groep','zone');if(['check','verplaats','kaart'].includes(S.groep))S.groep='zone';render()">← Terug naar kelder</button><h2 style="font-size:20px;margin:6px 0 4px">${t}</h2>`}
@@ -387,7 +389,7 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
   const inOV=u=>{const k=KI[OPENVAK(u.w)];return k&&u.cz===k.zone&&inVak(u.cv,k)};
   [true,false].forEach(eerst=>units.forEach(u=>{if(!u.open&&openN[u.w.wijn_id]>0&&(!eerst||inOV(u))){u.open=true;openN[u.w.wijn_id]--}}));
   units.sort((a,b)=>(b.open-a.open)||ord[a.f]-ord[b.f]||(PRIO[a.w.drinkstatus]??3)-(PRIO[b.w.drinkstatus]??3)||(b.w.prijs||0)-(a.w.prijs||0)||a.w.wijn_id.localeCompare(b.w.wijn_id));
-  const vrij=Object.fromEntries(KV.map(k=>[k.vak_id,k.capaciteit])),gezet=new Set(),inZone={},vVoor={};
+  const vrij=Object.fromEntries(KV.map(k=>[k.vak_id,k.capaciteit])),gezet=new Set(),inZone={},vVoor={},vAchter={};
   for(const u of units){
     let k=null;
     if(u.open)k=KI[OPENVAK(u.w)];
@@ -398,14 +400,20 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
       let c=KV.filter(x=>x.zone===z).map(x=>({x,ok:!x.categorie||kre(x.categorie).test(t),s:(x.categorie?4:0)+fz(x.fase)-(x.vak_id==='18°C-H'&&inH?3:0)+(x.vak_id==='18°C-O'&&inH?3:0)+(x.vak_id==='8°C-B'&&nz>=2?6:0)+(u.cz===x.zone&&inVak(u.cv,x)?1.5:0)}));  // ligt hij hier al? dan liever laten liggen
       c.sort((a,b)=>b.ok-a.ok||b.s-a.s||vrij[b.x.vak_id]-vrij[a.x.vak_id]);
       // eerst een passende lade met ruimte, anders een andere lade in dezelfde zone met ruimte, anders (te vol) de best passende
-      k=(c.find(y=>y.ok&&vrij[y.x.vak_id]>0)||c.find(y=>vrij[y.x.vak_id]>0)||c[0])?.x;}
+      k=(c.find(y=>y.ok&&vrij[y.x.vak_id]>0)||c.find(y=>vrij[y.x.vak_id]>0))?.x;
+      // zone helemaal vol? dan de zone ernaast (wit/rosé/bubbels: 8↔10°C), anders de kelder; pas als alles vol is: te vol
+      if(!k){const alt=u.w.wijnkleur==='Rood'?['18°C']:z==='8°C'?['10°C','18°C']:z==='10°C'?['8°C','18°C']:['18°C'];
+        for(const z2 of alt){const c2=KV.filter(x=>x.zone===z2&&vrij[x.vak_id]>0).sort((a,b)=>(b.categorie&&kre(b.categorie).test(t))-(a.categorie&&kre(a.categorie).test(t))||(a.vak_id==='18°C-D')-(b.vak_id==='18°C-D')||vrij[b.vak_id]-vrij[a.vak_id]);if(c2.length){k=c2[0];break}}}
+      if(!k)k=c[0]?.x;}
     if(!k)continue;
     const al=gezet.has(k.vak_id+'|'+u.w.wijn_id);
     u.k=k;vrij[k.vak_id]--;gezet.add(k.vak_id+'|'+u.w.wijn_id);inZone[k.zone+'|'+u.w.wijn_id]=(inZone[k.zone+'|'+u.w.wijn_id]||0)+1;
     // voorin één fles per wijn (eerst op bovenaan); achterin bewaarwijn, tweede flessen en Coravin-flessen
     u.pos=u.open?(openM[u.w.wijn_id]==='Coravin'?'achter':'voor'):u.f==='bewaar'||al?'achter':'voor';
-    // vol voorin (bijv. toonplank 5 flessen)? dan erachter
-    if(u.pos==='voor'&&k.cap_voor!=null){vVoor[k.vak_id]=(vVoor[k.vak_id]||0)+1;if(vVoor[k.vak_id]>k.cap_voor){u.pos='achter';vVoor[k.vak_id]--}}}
+    // voor en achter hebben elk een eigen maximum (bijv. 5 + 5): is de ene kant vol, dan de andere kant
+    if(k.cap_voor!=null){const mv=k.cap_voor,ma=k.capaciteit-k.cap_voor,nv=vVoor[k.vak_id]||0,na=vAchter[k.vak_id]||0;
+      if(u.pos==='voor'&&nv>=mv&&na<ma)u.pos='achter';else if(u.pos==='achter'&&na>=ma&&nv<mv)u.pos='voor';
+      if(u.pos==='voor')vVoor[k.vak_id]=nv+1;else vAchter[k.vak_id]=na+1}}
   // bewaarplanken (kelder): voorin wat het eerst op dronk komt, achterin de rest
   KV.filter(k=>(k.fase||'').startsWith('bewaar')).forEach(k=>{const us=units.filter(u=>u.k===k).sort((a,b)=>(a.w.beste_drinkmoment_vanaf||9999)-(b.w.beste_drinkmoment_vanaf||9999));us.forEach((u,i)=>u.pos=i<Math.ceil(us.length/2)?'voor':'achter')});
   units.forEach(u=>{if(u.k){u.doel=plek(u.k,u.pos);u.hier=u.cz===u.k.zone&&u.cv===u.doel}});
@@ -417,7 +425,8 @@ function drawKaart(){const P=kastPlan();
   const nmv=P.units.filter(u=>!u.hier).length,mode=S.kmode||'lade';
   let h=terug('Kelderkaart')+`<p class="sub">Zo ligt alles het handigst: per zone de juiste temperatuur, per lade één stijl (🏷 label), <b>voorin</b> één fles per wijn met wat eerst op moet vooraan, <b>achterin</b> de bewaarwijn en tweede flessen. Kleur: <span style="color:var(--bad)">■</span> eerst op · <span style="color:var(--ok)">■</span> nu drinken · <span style="color:var(--pred)">■</span> bewaren. Gestippeld = ligt nog ergens anders.</p>
   <div class="chips" style="margin:8px 0"><button class="chip ${mode==='lade'?'on':''}" onclick="S.kmode='lade';drawKaart()">Per lade (zo moet het)</button><button class="chip ${mode==='uit'?'on':''}" onclick="S.kmode='uit';drawKaart()">Uitpakken (waar ligt het nu)</button></div>
-  ${nmv?`<p class="sub"><b>${nmv} flessen</b> liggen nog niet op hun plek. Richt een lade in volgens de kaart en tik op <b>✓ Lade ingericht</b>; dan worden de verplaatsingen in één keer vastgelegd.</p>`:'<p class="sub" style="color:var(--ok)">✓ Alles ligt op zijn plek.</p>'}`;
+  ${nmv?`<div class="sec" style="border-left:4px solid var(--warn)"><b>🗺 ${nmv} fles${nmv===1?'':'sen'} herschikken</b><p class="sub" style="margin:4px 0 6px">Lades met werk (tik om erheen te gaan). Gestippelde flessen moeten naar die lade; leg ze erin en tik op <b>✓ Lade ingericht</b>.</p><div class="chips" style="flex-wrap:wrap">${P.KV.filter(k=>P.units.some(u=>u.k===k&&!u.hier)).sort((a,b)=>['16°C','10°C','8°C','18°C'].indexOf(a.zone)-['16°C','10°C','8°C','18°C'].indexOf(b.zone)||b.volgorde-a.volgorde).map(k=>`<button class="chip" onclick="document.getElementById('lade-${k.vak_id}')?.scrollIntoView({behavior:'smooth',block:'start'})">${esc(k.zone)} ${esc(k.naam)} <span class="badge">${P.units.filter(u=>u.k===k&&!u.hier).length}</span></button>`).join('')}</div>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:14px"><input type="checkbox" ${S.kalleen?'checked':''} onchange="S.kalleen=this.checked;drawKaart()"> Toon alleen wat moet verschuiven</label></div>`:'<p class="sub" style="color:var(--ok)">✓ Alles ligt op zijn plek. Niets te herschikken.</p>'}`;
   if(mode==='uit'){const by={};P.units.filter(u=>!u.hier).forEach(u=>(by[u.cz+' · '+(u.cv||'—')]=by[u.cz+' · '+(u.cv||'—')]||[]).push(u));
     h+=Object.keys(by).sort((a,b)=>ZONES.indexOf(by[a][0].cz)-ZONES.indexOf(by[b][0].cz)||a.localeCompare(b,'nl',{numeric:true})).map(k=>{const m=new Map();by[k].forEach(u=>{const key=u.w.wijn_id+'|'+u.k.vak_id+u.pos;if(!m.has(key))m.set(key,{u,n:0});m.get(key).n++});
       return `<div class="lade"><h4>Uit ${esc(k)}<small>${by[k].length} fl.</small></h4>${[...m.values()].map(({u,n})=>`<div class="srow" style="cursor:pointer" onclick="detail('${u.w.wijn_id}')"><span>${n>1?n+'× ':''}${esc(naam(u.w))} ${u.w.jaargang||''}</span><span class="muted" style="text-align:right">→ ${esc(u.k.zone)} · ${esc(u.doel)}</span></div>`).join('')}</div>`}).join('');
@@ -425,10 +434,10 @@ function drawKaart(){const P=kastPlan();
   for(const z of ['16°C','10°C','8°C','18°C']){const ks=P.KV.filter(k=>k.zone===z).sort((a,b)=>b.volgorde-a.volgorde);if(!ks.length)continue;
     const nz=P.units.filter(u=>u.k.zone===z).length,cz=ks.reduce((a,k)=>a+k.capaciteit,0);
     h+=`<div class="zkop"><h2>${esc(ZNAAM[z])}</h2><span class="muted">${nz} / ${cz}</span></div>`;
-    h+=ks.map(k=>{const us=P.units.filter(u=>u.k.vak_id===k.vak_id),voor=us.filter(u=>u.pos==='voor'),acht=us.filter(u=>u.pos==='achter').sort((a,b)=>(a.w.beste_drinkmoment_vanaf||9999)-(b.w.beste_drinkmoment_vanaf||9999));
-      const mv=us.filter(u=>!u.hier).length,vol=us.length>k.capaciteit;
-      return `<div class="lade"><h4>${esc(k.naam)}<small>${us.length} / ${k.capaciteit}${vol?' · <b style="color:var(--bad)">te vol</b>':''}</small></h4><div class="lab">${k.label?`🏷 <b>${esc(k.label)}</b>${k.label_achter?' · achter: '+esc(k.label_achter):''}`:'zonder label — '+esc((k.functie||'').replace(/^Geen label: /,''))}</div><div class="fill ${vol?'vol':''}"><span style="width:${Math.min(100,us.length/k.capaciteit*100)}%"></span></div>
-      ${voor.length?`<div class="pos">Voorin${k.label?' · '+esc(k.label):''} — eerst op vooraan</div>${kchips(voor)}`:''}${acht.length?`<div class="pos">Achterin${k.label_achter?' · '+esc(k.label_achter):''}</div>${kchips(acht)}`:''}${!us.length?'<p class="muted" style="font-size:13px">Leeg</p>':''}
+    h+=ks.filter(k=>!S.kalleen||!nmv||P.units.some(u=>u.k===k&&!u.hier)).map(k=>{const alle=P.units.filter(u=>u.k.vak_id===k.vak_id),us=S.kalleen&&nmv?alle.filter(u=>!u.hier):alle,voor=us.filter(u=>u.pos==='voor'),acht=us.filter(u=>u.pos==='achter').sort((a,b)=>(a.w.beste_drinkmoment_vanaf||9999)-(b.w.beste_drinkmoment_vanaf||9999));
+      const mv=alle.filter(u=>!u.hier).length,vol=alle.length>k.capaciteit;
+      return `<div class="lade${mv?' todo':''}" id="lade-${k.vak_id}" style="scroll-margin-top:12px"><h4><span>${esc(k.naam)} ${mv?`<span class="badge">${mv} te doen</span>`:''}</span><small>${alle.length} / ${k.capaciteit}${vol?' · <b style="color:var(--bad)">te vol</b>':''}</small></h4><div class="lab">${k.label?`🏷 <b>${esc(k.label)}</b>${k.label_achter?' · achter: '+esc(k.label_achter):''}`:'zonder label — '+esc((k.functie||'').replace(/^Geen label: /,''))}</div><div class="fill ${vol?'vol':''}"><span style="width:${Math.min(100,alle.length/k.capaciteit*100)}%"></span></div>
+      ${voor.length?`<div class="pos">Voorin${k.label?' · '+esc(k.label):''} — eerst op vooraan</div>${kchips(voor)}`:''}${acht.length?`<div class="pos">Achterin${k.label_achter?' · '+esc(k.label_achter):''}</div>${kchips(acht)}`:''}${!alle.length?'<p class="muted" style="font-size:13px">Leeg</p>':''}
       ${mv?`<button class="btn sm" style="margin-top:8px" onclick="ladeKlaar('${k.vak_id}',this)">✓ Lade ingericht · ${mv} verplaatsing${mv>1?'en':''} vastleggen</button>`:''}</div>`}).join('')}
   $('#main').innerHTML=h}
 async function ladeKlaar(id,btn){const P=kastPlan(),g={};
@@ -956,7 +965,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-04j';
+const VERSIE='2026-11-04l';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
