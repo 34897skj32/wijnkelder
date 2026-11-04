@@ -158,7 +158,7 @@ input[type=range]{width:100%;margin:12px 0 4px;accent-color:var(--wine)}
 .lade h4{margin:0;font-size:14px;display:flex;justify-content:space-between;gap:8px}.lade h4 small{color:var(--muted);font-weight:400}
 .lade .lab{font-size:12px;color:var(--muted);margin:2px 0 6px}.lade .pos{font-size:11px;color:var(--muted);margin:6px 0 2px;text-transform:uppercase;letter-spacing:.04em}
 .fill{height:4px;border-radius:2px;background:var(--line);margin:6px 0}.fill span{display:block;height:100%;border-radius:2px;background:var(--ok)}.fill.vol span{background:var(--bad)}
-.kc{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:3px 8px;margin:2px 3px 2px 0;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-left:4px solid var(--viv);text-align:left}
+.kc{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 6px;max-width:100%;white-space:normal;line-height:1.3;font-size:12px;padding:3px 8px;margin:2px 3px 2px 0;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-left:4px solid var(--viv);text-align:left}
 .kc.s-eerst{border-left-color:var(--bad)}.kc.s-nu{border-left-color:var(--ok)}.kc.s-bewaar{border-left-color:var(--pred)}
 .kc.mv{border-style:dashed;border-left-style:solid}.kc i{font-style:normal;color:var(--muted);font-size:11px}
 .zkop{display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 2px}.zkop h2{font-size:18px;margin:0}
@@ -409,7 +409,7 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
   units.forEach(u=>{if(u.k){u.doel=plek(u.k,u.pos);u.hier=u.cz===u.k.zone&&u.cv===u.doel}});
   return {units:units.filter(u=>u.k),KV,vrij}}
 function kchips(us){const m=new Map();us.forEach(u=>{const key=u.w.wijn_id+'|'+(u.hier?'':u.cz+u.cv);if(!m.has(key))m.set(key,{u,n:0});m.get(key).n++});
-  return [...m.values()].map(({u,n})=>`<button class="kc s-${u.f}${u.hier?'':' mv'}" onclick="detail('${u.w.wijn_id}')">${n>1?n+'× ':''}${u.open?'🫗 ':''}${esc(u.w.producent||u.w.wijnnaam_cuvee)} ${u.w.jaargang?"'"+String(u.w.jaargang).slice(2):''}${u.hier?'':`<i>↘ nu ${esc(u.cz)}${u.cv?' · '+esc(u.cv):''}</i>`}</button>`).join('')}
+  return [...m.values()].map(({u,n})=>`<button class="kc s-${u.f}${u.hier?'':' mv'}" onclick="detail('${u.w.wijn_id}')">${n>1?n+'× ':''}${u.open?'🫗 ':''}<span>${u.w.producent?`<b style="font-weight:600">${esc(u.w.producent)}</b> · `:''}${esc(u.w.wijnnaam_cuvee||'')} ${u.w.jaargang||'NV'}</span>${u.hier?'':`<i>↘ nu ${esc(u.cz)}${u.cv?' · '+esc(u.cv):''}</i>`}</button>`).join('')}
 function drawKaart(){const P=kastPlan();
   if(!P)return $('#main').innerHTML=terug('Kelderkaart')+'<div class="empty-state"><h3>Nog geen lade-indeling</h3>Draai eerst de SQL-bestanden 19 en 22 in Supabase.</div>';
   const nmv=P.units.filter(u=>!u.hier).length,mode=S.kmode||'lade';
@@ -952,7 +952,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-04f';
+const VERSIE='2026-11-04g';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
