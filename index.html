@@ -640,6 +640,7 @@ function editWine(){const w=S.cur.w;
         toast('Nieuwe jaargang aangemaakt');invalidate();render();return detail(nw.wijn_id);
       }
       await q(sb.from('wijnen').update(v).eq('wijn_id',w.wijn_id));
+      naRekenen();
       toast('Opgeslagen');invalidate();render();detail(w.wijn_id);
     }catch(err){e.target.disabled=false}};
 }
@@ -951,7 +952,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-04e';
+const VERSIE='2026-11-04f';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
