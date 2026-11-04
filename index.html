@@ -395,7 +395,7 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
       const fz=a=>!a?0:a===u.f2||a===u.f?2:(a==='eerst'&&u.f==='nu'||a==='nu'&&u.f==='eerst')?1:a.startsWith('bewaar')&&u.f==='bewaar'?1:-2;
       const nz=inZone[z+'|'+u.w.wijn_id]||0,inH=gezet.has('18°C-H|'+u.w.wijn_id);
       // 18°C: één fles per wijn in de honingraat, de rest ernaast; 8°C: derde fles en verder naar de bodem (reserve)
-      let c=KV.filter(x=>x.zone===z).map(x=>({x,ok:!x.categorie||kre(x.categorie).test(t),s:(x.categorie?4:0)+fz(x.fase)-(x.vak_id==='18°C-H'&&inH?3:0)+(x.vak_id==='18°C-O'&&inH?3:0)+(x.vak_id==='8°C-B'&&nz>=2?6:0)}));
+      let c=KV.filter(x=>x.zone===z).map(x=>({x,ok:!x.categorie||kre(x.categorie).test(t),s:(x.categorie?4:0)+fz(x.fase)-(x.vak_id==='18°C-H'&&inH?3:0)+(x.vak_id==='18°C-O'&&inH?3:0)+(x.vak_id==='8°C-B'&&nz>=2?6:0)+(u.cz===x.zone&&inVak(u.cv,x)?1.5:0)}));  // ligt hij hier al? dan liever laten liggen
       c.sort((a,b)=>b.ok-a.ok||b.s-a.s||vrij[b.x.vak_id]-vrij[a.x.vak_id]);
       // eerst een passende lade met ruimte, anders een andere lade in dezelfde zone met ruimte, anders (te vol) de best passende
       k=(c.find(y=>y.ok&&vrij[y.x.vak_id]>0)||c.find(y=>vrij[y.x.vak_id]>0)||c[0])?.x;}
@@ -956,7 +956,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-04i';
+const VERSIE='2026-11-04j';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
