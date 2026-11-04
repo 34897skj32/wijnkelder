@@ -163,6 +163,10 @@ input[type=range]{width:100%;margin:12px 0 4px;accent-color:var(--wine)}
 .kc.mv{border-style:dashed;border-left-style:solid}.kc i{font-style:normal;color:var(--muted);font-size:11px}
 .zkop{display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 2px}.zkop h2{font-size:18px;margin:0}
 .ofl{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}.ofl:first-of-type{border-top:0}
+.chat{display:flex;flex-direction:column;gap:10px;margin:10px 0}.msg{padding:10px 12px;border-radius:14px;line-height:1.45;font-size:15px;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;background:var(--wine);color:#fff;max-width:85%}.msg.assistant{background:var(--card);border:1px solid var(--line)}
+.msg ul{margin:4px 0 4px 18px;padding:0}.msg .wl{display:inline;border:0;background:var(--viv-soft);color:var(--ink);padding:1px 6px;border-radius:6px;font-size:14px;cursor:pointer;text-decoration:underline dotted}
+.chatin{display:flex;gap:8px;align-items:flex-end;position:sticky;bottom:0;background:var(--bg);padding:8px 0}.chatin textarea{flex:1;min-height:44px;max-height:140px;resize:vertical;font:16px var(--sans);padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
 </style>
 </head>
 <body>
@@ -246,7 +250,7 @@ const ICON={
 function render(){
   const t=S.tab;
   $('#app').innerHTML=`<header><div class="top"><h1>${{kelder:'Mijn kelder',geproefd:'Geproefd',ontdek:'Ontdekken',smaak:'Onze smaak'}[t]}</h1>
-   <div style="display:flex;gap:6px;align-items:center"><div class="who">${['Jeroen','Liz'].map(p=>`<button class="${S.ik===p?'on':''}" onclick="setIk('${p}')">${p}</button>`).join('')}</div><button class="x" style="position:static;margin:0" onclick="beheer()" aria-label="Beheer">⚙</button></div></div>
+   <div style="display:flex;gap:6px;align-items:center"><div class="who">${['Jeroen','Liz'].map(p=>`<button class="${S.ik===p?'on':''}" onclick="setIk('${p}')">${p}</button>`).join('')}</div><button class="x" style="position:static;margin:0" onclick="vraagChat()" aria-label="Vraag het de app">💬</button><button class="x" style="position:static;margin:0" onclick="beheer()" aria-label="Beheer">⚙</button></div></div>
    <div id="hsub"></div></header><main id="main"><div class="empty-state">Laden…</div></main>
   <nav>${navb('kelder','Kelder')}${navb('geproefd','Geproefd')}<button class="plus" onclick="addFlow()" aria-label="Toevoegen">${ICON.plus}</button>${navb('ontdek','Ontdekken')}${navb('smaak','Smaak')}</nav>`;
   ({kelder:kelderView,geproefd:geproefdView,ontdek:ontdekView,smaak:smaakView})[t]();
@@ -740,6 +744,33 @@ async function exportVerrijking(){
   try{await navigator.clipboard.writeText(txt);toast(`${todo.length} wijnen gekopieerd — plak in de chat met Claude`)}
   catch(e){sheet(`<h2>Kopieer deze tekst</h2><textarea class="inp" style="min-height:50vh">${esc(txt)}</textarea>`)}
 }
+/* ---------- A10: vraag het de app ---------- */
+const VOORBEELD=['2 vrienden, lam, lekker maar niet te duur','Wat moet er deze maand op?','Welke wijn bij sushi vanavond?','Iets bijzonders voor een verjaardag','Wat drinken Liz en ik allebei graag?','Wat moet ik bijkopen?'];
+function chatLaad(){if(!S.chat){try{S.chat=JSON.parse(ls.get('chat','[]'))}catch(e){S.chat=[]}}return S.chat}
+function chatBewaar(){ls.set('chat',JSON.stringify(S.chat.slice(-20)))}
+async function wijnNamen(){if(S.namen)return S.namen;const src=S.kelder||await q(sb.from('wijn_overzicht').select('wijn_id,producent,wijnnaam_cuvee,jaargang').gt('voorraad',0));
+  S.namen=Object.fromEntries(src.map(w=>[w.wijn_id,naam(w)+(w.jaargang?' '+w.jaargang:'')]));return S.namen}
+function chatHtml(t){let h=esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+  h=h.replace(/\[\[([A-Za-z0-9_-]+)\]\]/g,(m,id)=>`<button class="wl" onclick="detail('${id}')">${S.namen?.[id]?'↗':'bekijk ↗'}</button>`);
+  const out=[];let ul=false;for(const r of h.split('\n')){const b=r.match(/^\s*[-•*]\s+(.*)/);if(b){if(!ul){out.push('<ul>');ul=true}out.push('<li>'+b[1]+'</li>')}else{if(ul){out.push('</ul>');ul=false}out.push(r?r+'<br>':'<br>')}}if(ul)out.push('</ul>');
+  return out.join('').replace(/(<br>){3,}/g,'<br><br>')}
+function chatRender(bezig){const c=chatLaad(),el=$('#chatl');if(!el)return;
+  el.innerHTML=(c.length?'':`<p class="sub">Vraag alles over je kelder: wat je vanavond opentrekt, wat bij een gerecht past, wat op moet, wat je moet bijkopen. Claude kent je flessen, het drinkmoment, de prijzen en jullie smaak.</p><div class="chips" style="flex-wrap:wrap;margin-top:8px">${VOORBEELD.map(v=>`<button class="chip" onclick="chatStuur(this.textContent)">${esc(v)}</button>`).join('')}</div>`)+
+  c.map(m=>`<div class="msg ${m.rol}">${m.rol==='user'?esc(m.tekst):chatHtml(m.tekst)}${m.bronnen?.length?`<div class="sub" style="margin-top:6px">${m.bronnen.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">bron ↗</a>`).join(' · ')}</div>`:''}</div>`).join('')+
+  (bezig?'<div class="msg assistant"><span class="muted">Claude kijkt in je kelder…</span></div>':'');
+  el.lastElementChild?.scrollIntoView({block:'end'})}
+async function vraagChat(){sheet(`<h2>Vraag het de app</h2><div class="chat" id="chatl"></div>
+  <div class="chatin"><textarea id="chatq" rows="1" placeholder="Bijv. 4 personen, risotto met paddenstoelen…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatStuur()}"></textarea><button class="btn" id="chatgo" onclick="chatStuur()">Vraag</button></div>
+  <p style="text-align:center"><button class="chip" onclick="S.chat=[];chatBewaar();chatRender()">Nieuw gesprek</button></p>`);
+  await wijnNamen().catch(()=>{});chatRender()}
+async function chatStuur(t){const inp=$('#chatq');const vraag=(t||inp?.value||'').trim();if(!vraag)return;if(inp)inp.value='';
+  const c=chatLaad(),gesch=c.map(m=>({rol:m.rol,tekst:m.tekst}));c.push({rol:'user',tekst:vraag});chatRender(true);const b=$('#chatgo');if(b)b.disabled=true;
+  try{const {data,error}=await sb.functions.invoke('vraag-kelder',{body:{vraag,geschiedenis:gesch,persoon:S.ik}});
+    if(error){let msg=error.message;try{const x=await error.context.json();msg=x.fout||x.message||msg}catch(e){}throw new Error(msg)}
+    if(data?.fout)throw new Error(data.fout);c.push({rol:'assistant',tekst:data.antwoord||'(geen antwoord)',bronnen:data.bronnen||[]})}
+  catch(e){c.push({rol:'assistant',tekst:'⚠ Dat lukte niet: '+(e.message||e)})}
+  chatBewaar();chatRender();if(b)b.disabled=false}
+
 /* ---------- A9: aanvullen via internet ---------- */
 async function verrijk(id,modus='volledig'){const {data,error}=await sb.functions.invoke('verrijk-wijn',{body:{wijn_id:id,modus}});
   if(error){let msg=error.message;try{const b=await error.context.json();msg=b.fout||b.message||msg}catch(e){}throw new Error(msg)}
@@ -920,7 +951,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-04d';
+const VERSIE='2026-11-04e';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
