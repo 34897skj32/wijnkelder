@@ -548,9 +548,9 @@ async function gedronkenView(){
   const W='wijn_id,producent,wijnnaam_cuvee,jaargang,wijnkleur,regio,land,etiketfoto_url,flesfoto_url';
   if(!S.gedronken){
     const [dm,km]=await Promise.all([
-      q(sb.from('drinkmomenten').select(`drinkmoment_id,datum,gelegenheid,gerecht,wijnen(${W}),proefnotities(persoon,eigen_rating,eigen_proefnotitie)`).order('datum',{ascending:false}).limit(300)),
+      q(sb.from('drinkmomenten').select(`*,wijnen(${W}),proefnotities(persoon,eigen_rating,eigen_proefnotitie)`).order('datum',{ascending:false}).limit(300)),
       q(sb.from('voorraadmutaties').select(`datumtijd,reden,toelichting,wijnen(${W})`).in('reden',['Kapot','Weggegeven']).eq('testgegeven',false).order('datumtijd',{ascending:false}).limit(100))]);
-    S.gedronken=[...dm.map(d=>({d:d.datum,w:d.wijnen,r:d.proefnotities||[],x:[d.gelegenheid,d.gerecht].filter(Boolean).join(' · ')})),
+    S.gedronken=[...dm.map(d=>({d:d.datum,w:d.wijnen,r:d.proefnotities||[],x:[d.fase?({'te jong':'🌱 te jong','op zijn best':'🍷 op zijn best','over de top':'🍂 over de top'})[d.fase]||d.fase:'',d.gelegenheid,d.gerecht].filter(Boolean).join(' · ')})),
       ...km.map(m=>({d:m.datumtijd.slice(0,10),w:m.wijnen,r:[],x:(m.reden==='Kapot'?'✗ Bedorven / weggegooid':'Weggegeven')+(m.toelichting?' — '+m.toelichting:'')}))].filter(i=>i.w).sort((a,b)=>b.d.localeCompare(a.d));
   }
   const it=S.gedronken.filter(i=>match(i.w));
@@ -695,6 +695,7 @@ async function detail(id){
   let sq=sb.from('wijn_overzicht').select('wijn_id,jaargang,voorraad,rating_jeroen,rating_liz,drinkstatus').eq('wijnnaam_cuvee',w.wijnnaam_cuvee);
   const sib=await q(w.producent?sq.eq('producent',w.producent):sq.is('producent',null));sib.sort((a,b)=>(b.jaargang||0)-(a.jaargang||0));
   const dk=n=>n.drinkdatum_bevestigd||n.review_kalenderdatum||n.aangemaakt||'';notes.sort((a,b)=>dk(b).localeCompare(dk(a)));
+  try{const {data:pwd}=await sb.from('wijnen').select('proefwijzer,proefwijzer_bron').eq('wijn_id',id);if(pwd?.[0])Object.assign(w,pwd[0])}catch(e){}
   S.cur={w,vak,muts};
   const own=w.rating_jeroen!=null||w.rating_liz!=null;
   const pred=S.ik==='Liz'?w.likely_to_like_liz:w.likely_to_like_jeroen, betr=S.ik==='Liz'?w.match_betrouwbaarheid_liz:w.match_betrouwbaarheid_jeroen;
@@ -726,6 +727,7 @@ async function detail(id){
   <div id="lijkt"></div>
   <div class="sec"><h3>Drinken</h3>${tl}
    <dl class="kv" style="margin-top:10px">${w.serveertemperatuur_c?`<dt>Schenken</dt><dd>${w.serveertemperatuur_c}°C</dd>`:''}${w.decanteeradvies?`<dt>Decanteren</dt><dd>${esc(w.decanteeradvies)}${w.decanteertijd_minuten?` · ${w.decanteertijd_minuten} min`:''}${w.decanteertoelichting?`<br><span class="muted">${esc(w.decanteertoelichting)}</span>`:''}</dd>`:''}</dl></div>
+  ${proefwijzerHtml(w)}
   ${prof.length?`<div class="sec"><h3>Smaakprofiel</h3>${prof.map(([k,v])=>`<div class="bar">${k}<div><span style="width:${v*20}%"></span></div></div>`).join('')}${w.houtgebruik?`<p class="sub">Hout: ${esc(w.houtgebruik)}</p>`:''}</div>`:''}
   <div class="sec"><h3>Proefnotities</h3>${notes.length?notes.map(n=>`<div class="note ${n.persoon}"><b>${esc(n.persoon)} · ${f1(n.eigen_rating)}</b>${n.opnieuw_kopen?` · opnieuw kopen: ${esc(n.opnieuw_kopen)}`:''}<div>${esc(n.eigen_proefnotitie||'')}</div>${n.persoonlijke_notitie?`<small>${esc(n.persoonlijke_notitie)}</small>`:''}${PK.some(([k])=>n['proef_'+k])?`<small>${PK.filter(([k])=>n['proef_'+k]).map(([k,l])=>l+' '+n['proef_'+k]).join(' · ')}</small>`:''}<small>${esc(n.drinkdatum_bevestigd||n.review_kalenderdatum||(n.aangemaakt||'').slice(0,10))} · ${esc(n.bron)}</small></div>`).join(''):'<p class="muted">Nog niet geproefd.</p>'}</div>
   ${muts.length?`<div class="sec"><h3>Laatste mutaties</h3>${muts.map(m=>`<div class="mut"><span>${new Date(m.datumtijd).toLocaleDateString('nl-NL')} · ${esc(m.reden)} ${m.aantal_delta>0?'+':''}${m.aantal_delta} · ${esc(m.zone)}${m.vak?' '+esc(m.vak):''}</span>${['Inventarisatie','Aankoop','Gedronken'].includes(m.reden)&&!muts.some(x=>x.correctie_van_mutatie_id===m.mutatie_id)?`<button class="btn sm sec2" onclick="corrigeer('${m.mutatie_id}')">Ongedaan</button>`:''}</div>`).join('')}</div>`:''}
@@ -811,13 +813,27 @@ async function corrigeer(m){if(!confirm('Deze mutatie ongedaan maken? Er wordt e
 function drinkFlow(i){const v=S.cur.vak[i],w=S.cur.w;
   sheet(`<h2>Fles openen</h2><p class="sub">${esc(naam(w))} ${w.jaargang||''} · uit ${esc(ZNAAM[v.zone])}${v.vak?' · '+esc(v.vak):''}</p>
   ${w.decanteeradvies?`<div class="sec"><b>Decanteren:</b> ${esc(w.decanteeradvies)}${w.decanteertijd_minuten?` · ${w.decanteertijd_minuten} min`:''}${w.serveertemperatuur_c?`<br><b>Schenken op:</b> ${w.serveertemperatuur_c}°C`:''}</div>`:''}
+  <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">🔍 Waar let je op? (proefwijzer)</summary>${proefwijzerHtml(w)}</details>
+  <label class="f">In welke fase was hij? (optioneel — de app leert hiervan)</label><div class="seg" id="fs">${['te jong','op zijn best','over de top','kapot'].map(f=>`<button data-f="${f}">${f}</button>`).join('')}</div>
   <label class="f">Gelegenheid (optioneel)</label><input class="inp" id="gel" placeholder="bijv. etentje met vrienden">
   <label class="f">Gerecht (optioneel)</label><input class="inp" id="ger" placeholder="bijv. lamsrack">
   <button class="btn full" id="go">Fles gedronken · 1 afboeken</button>`);
+  let fase=null;$('#fs').onclick=e=>{const f=e.target.dataset.f;if(!f)return;fase=fase===f?null:f;$('#fs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.f===fase));
+    $('#go').textContent=fase==='kapot'?'Fles was kapot · 1 afboeken (niet als gedronken)':'Fles gedronken · 1 afboeken'};
   $('#go').onclick=async e=>{e.target.disabled=true;
-    try{const dm=await q(sb.rpc('fles_drinken',{p_wijn:w.wijn_id,p_zone:v.zone,p_vak:v.vak||'',p_door:S.ik,p_gelegenheid:$('#gel').value||null,p_gerecht:$('#ger').value||null}));
-      invalidate();toast('1 fles afgeboekt');rateFlow(w.wijn_id,dm)}catch(err){e.target.disabled=false}};
+    try{if(fase==='kapot'){await q(sb.from('voorraadmutaties').insert({wijn_id:w.wijn_id,aantal_delta:-1,reden:'Kapot',zone:v.zone,vak:v.vak||'',verwerkt_door:S.ik,toelichting:'Kapot bij openen'+($('#gel').value?' · '+$('#gel').value:'')}));
+        invalidate();toast('Afgeboekt als kapot — staat bij Geproefd → Gedronken');closeSheet();render();return}
+      const dm=await q(sb.rpc('fles_drinken',{p_wijn:w.wijn_id,p_zone:v.zone,p_vak:v.vak||'',p_door:S.ik,p_gelegenheid:$('#gel').value||null,p_gerecht:$('#ger').value||null}));
+      if(fase){sb.from('drinkmomenten').update({fase}).eq('drinkmoment_id',dm).then(()=>{});await leerFase(w,fase)}
+      invalidate();toast('1 fles afgeboekt'+(fase?' · drinkvenster bijgesteld':''));rateFlow(w.wijn_id,dm)}catch(err){e.target.disabled=false}};
 }
+async function leerFase(w,fase){const Y=new Date().getFullYear();let a=w.drinkvenster_vanaf_jaar,t=w.drinkvenster_tot_jaar,ba=w.beste_drinkmoment_vanaf,bt=w.beste_drinkmoment_tot;
+  if(fase==='te jong'){ba=Math.max(ba||0,Y+1);bt=Math.max(bt||0,ba+1);t=Math.max(t||0,bt+1);a=a??Y}
+  else if(fase==='op zijn best'){ba=Math.min(ba??Y,Y);bt=Math.max(bt??Y,Y);a=Math.min(a??Y,Y);t=Math.max(t??Y,Y)}
+  else if(fase==='over de top'){t=Y;bt=Math.min(bt??Y-1,Y-1);ba=Math.min(ba??bt,bt);a=Math.min(a??ba,ba)}
+  else return;
+  try{await sb.from('wijnen').update({drinkvenster_vanaf_jaar:a,drinkvenster_tot_jaar:t,beste_drinkmoment_vanaf:ba,beste_drinkmoment_tot:bt,
+    advies_bron:`Eigen notitie: geproefd ${new Date().toISOString().slice(0,10)} — ${fase}`,advies_laatst_bijgewerkt:new Date().toISOString()}).eq('wijn_id',w.wijn_id)}catch(e){}}
 function pickDrink(){const v=S.cur.vak;if(v.length===1)return drinkFlow(0);
   sheet(`<h2>Uit welk vak?</h2><p class="sub">${esc(naam(S.cur.w))} ${S.cur.w.jaargang||''}</p>${v.map((x,i)=>`<button class="res" onclick="drinkFlow(${i})"><div><b>${x.aantal}× ${esc(ZNAAM[x.zone])}${x.vak?' · '+esc(x.vak):''}</b></div></button>`).join('')}`)}
 const PK=[['body','Body','licht','vol'],['zuren','Zuren','zacht','fris/zuur'],['tannines','Tannine','zacht','stroef'],['hout','Hout','geen','veel'],['fruit','Fruit','ingetogen','uitbundig'],['zoet','Zoet','kurkdroog','zoet']];
@@ -889,6 +905,35 @@ async function exportVerrijking(){
   try{await navigator.clipboard.writeText(txt);toast(`${todo.length} wijnen gekopieerd — plak in de chat met Claude`)}
   catch(e){sheet(`<h2>Kopieer deze tekst</h2><textarea class="inp" style="min-height:50vh">${esc(txt)}</textarea>`)}
 }
+/* ---------- Proefwijzer: hoe smaakt hij op zijn best, te jong, te oud, kapot ---------- */
+const PW_STIJL={
+ 'Fris & mineraal wit':{best:'Strak en levendig: citrus, groene appel, kruisbes of witte bloemen, een zilte of krijtachtige mineraliteit en een frisse, lange afdronk.',te_jong:'Zelden een probleem; hooguit wat scherp en gesloten (gisttonen, CO₂-prikje). Even laten ademen.',te_oud:'Fruit vlak en moe, kleur donkergeel, zuren voelen hard zonder fruit, tonen van hooi of natte wol. (Riesling en Chablis van niveau worden juist complexer: honing, petrol, toast.)'},
+ 'Rond & sappig wit':{best:'Rijp geel fruit (peer, perzik, meloen), zacht en romig in de mond, maar met genoeg frisheid om niet zwaar te worden.',te_jong:'Wat eendimensionaal en fruitsnoeperig; nog geen diepgang.',te_oud:'Platte, wat zoetige indruk zonder frisheid, gekookt fruit, notig of oxidatief (sherry-achtig), goudgele tot amberkleur.'},
+ 'Vol & romig wit (hout)':{best:'Vol en vettig: rijp fruit met boter, brioche, hazelnoot en een vleugje vanille, hout netjes geïntegreerd, lange afdronk.',te_jong:'Hout en vanille springen eruit, toast en kokos overheersen het fruit, de wijn voelt wat stug.',te_oud:'Hout overheerst nog maar fruit is weg, oxidatief (noten, sherry), kleur goud tot amber, afdronk kort en wat bitter.'},
+ 'Aromatisch wit':{best:'Uitbundig geurig: abrikoos, perzik, lychee, rozen of bloesem; zacht en vol, met een kruidige of frisse afdronk.',te_jong:'Kan wat parfumachtig en alcoholisch overkomen; geef hem 10 minuten in het glas.',te_oud:'Het parfum verdwijnt eerst: vlak, zeepachtig of bitter, met een dikke, vermoeide indruk. Deze stijl is op zijn best jong.'},
+ 'Fruitige rosé':{best:'Sappig rood fruit (aardbei, framboos, kers), fris en dorstlessend.',te_jong:'Komt bijna niet voor.',te_oud:'Kleur oranje-bruin, fruit weg, smaakt vlak, wat bitter of muf. Rosé is bijna altijd op zijn best binnen 1–2 jaar.'},
+ 'Droge Provence-rosé':{best:'Fijn en droog: rode bes, perzik, citrusschil, kruiden van de garrigue, zilte frisheid; bleke zalmkleur.',te_jong:'Komt bijna niet voor.',te_oud:'Uien- of oranjeachtige kleur, fruit verdwenen, vlak en wat bitter. Topcuvées kunnen een paar jaar, de meeste moeten binnen 2 jaar op.'},
+ 'Fris mousserend':{best:'Levendige, fijne bubbel, fris fruit (appel, citrus, peer), droog en opwekkend.',te_jong:'Komt niet voor.',te_oud:'Bubbel wordt slap, kleur dieper, smaak vlak, wat notig of muf.'},
+ 'Champagne & traditioneel':{best:'Fijne, aanhoudende mousse; citrus en appel, brioche, toast en noten van de gistrijping, kalkachtige frisheid, lange afdronk.',te_jong:'Strak en scherp, nog weinig brioche of diepgang; de zuren domineren.',te_oud:'Bubbel bijna weg, kleur goud tot amber, oxidatief (sherry, gedroogde appel), vermoeid. Gerijpte Champagne kan wel prachtig nootachtig zijn zolang er nog frisheid is.'},
+ 'Licht & fruitig rood':{best:'Sappig rood fruit (kers, framboos, aardbei), licht en soepel, nauwelijks tannine; lekker iets koeler (14–15°C).',te_jong:'Hooguit wat gistig of snoepachtig.',te_oud:'Fruit weg, waterig en zuur, bruinige rand. Deze stijl is op zijn best binnen een paar jaar.'},
+ 'Elegant & fris rood':{best:'Kers, framboos, viooltjes, aardse tonen (bosgrond, paddenstoel) zodra hij rijpt; zijdezachte tannine, frisse zuren, lange afdronk.',te_jong:'Fruit en zuren voorop, hout nog zichtbaar, tannine wat korrelig, aroma’s nog gesloten. Decanteren helpt.',te_oud:'Fruit verdwenen, alleen nog bosgrond, leer of thee; dun en zuur; kleur steenrood tot bruin aan de rand.'},
+ 'Rond & soepel rood':{best:'Rijp donker en rood fruit, zacht en vol, ronde tannine, wat kruiden of drop; makkelijk drinkbaar.',te_jong:'Wat ruw of jammy, alcohol of hout springt eruit.',te_oud:'Fruit wordt gedroogd of gekookt (pruim, rozijn), de wijn voelt droog en vermoeid, bruinige rand.'},
+ 'Vol & zacht rood':{best:'Rijp, warm donker fruit (pruim, braam), chocolade of specerijen, vol maar zacht, fluwelen tannine.',te_jong:'Zwaar en log, alcohol en hout domineren, fruit als jam.',te_oud:'Gedroogd fruit, port-achtig of rozijnig, alcohol voelt heet omdat het fruit weg is.'},
+ 'Vol & krachtig rood':{best:'Donker fruit (cassis, braam, kers) met tertiaire tonen (leer, tabak, ceder, truffel), stevige maar gepolijste tannine, lange afdronk.',te_jong:'Tannine trekt je mond droog, fruit zit "op slot", hout en alcohol voeren de boventoon. Lang decanteren of laten liggen.',te_oud:'Fruit weg en droog, alleen nog leer of paddenstoel, de tannine voelt dor; steenrode of bruine rand, korte afdronk.'},
+ 'Zoet & edel':{best:'Zoet maar fris: abrikoos, honing, sinaasappelschil, noten of gedroogd fruit, met zuren die de zoetheid optillen.',te_jong:'Zoet en fruitig, maar nog wat eenvoudig of plakkerig.',te_oud:'Zuren verdwenen, plakkerig of bitter, sherry-achtig. (Versterkte wijn zoals Banyuls of port houdt het heel lang.)'}};
+const PW_KLEUR={Rood:'Rond & soepel rood',Wit:'Rond & sappig wit',Rosé:'Fruitige rosé',Mousserend:'Fris mousserend',Dessertwijn:'Zoet & edel'};
+const PW_KAPOT='Kurk (TCA): natte karton, muffe kelder, het fruit is gedempt — niet te redden. · Oxidatie: sherry, noten, appelcider, bruinige kleur. · Hitte: gekookte jam, kurk uit de fles gedrukt of plakkerige capsule. · Reductie: lucifer, rotte eieren of rubber — verdwijnt vaak met lucht, dus eerst decanteren.';
+function proefwijzer(w){const eigen=w.proefwijzer&&typeof w.proefwijzer==='object'?w.proefwijzer:null;
+  const st=PW_STIJL[w.stijlfamilie]||PW_STIJL[PW_KLEUR[w.wijnkleur]]||PW_STIJL['Rond & soepel rood'];
+  return {best:eigen?.best||st.best,te_jong:eigen?.te_jong||st.te_jong,te_oud:eigen?.te_oud||st.te_oud,kapot:eigen?.kapot||PW_KAPOT,
+    bron:eigen?(w.proefwijzer_bron||'Claude'):'algemeen voor '+(PW_STIJL[w.stijlfamilie]?w.stijlfamilie.toLowerCase():'deze kleur')}}
+function proefwijzerHtml(w,compact){const p=proefwijzer(w),y=new Date().getFullYear();
+  const fase=/over de top|nog net/i.test(w.drinkstatus||'')?'te_oud':/laten liggen|bijna/i.test(w.drinkstatus||'')?'te_jong':'best';
+  const blok=(k,ico,t)=>`<div style="padding:6px 0;border-top:1px solid var(--line)${k===fase?';background:var(--bg);margin:0 -8px;padding:6px 8px;border-radius:8px':''}"><b style="font-size:13px">${ico} ${t}</b>${k===fase?' <span class="tag best" style="font-size:10px">waarschijnlijk nu</span>':''}<div style="font-size:14px;line-height:1.45">${esc(p[k])}</div></div>`;
+  return `<div class="sec"><h3>Proefwijzer</h3><p class="sub" style="margin-bottom:4px">Zo herken je in je glas in welke fase hij zit.${w.drinkstatus?` Verwachting nu (${y}): <b>${esc(w.drinkstatus.toLowerCase())}</b>.`:''}</p>
+  ${blok('best','🍷','Op zijn best')}${blok('te_jong','🌱','Te jong')}${blok('te_oud','🍂','Te oud')}${compact?'':blok('kapot','⚠️','Kapot')}
+  <p class="sub" style="margin-top:6px">Bron: ${esc(p.bron)}${!w.proefwijzer?' · tik op 🔎 Aanvullen voor een tekst speciaal voor deze wijn':''}</p></div>`}
+
 /* ---------- A10: vraag het de app ---------- */
 const VOORBEELD=['2 vrienden, lam, lekker maar niet te duur','Wat moet er deze maand op?','Welke wijn bij sushi vanavond?','Iets bijzonders voor een verjaardag','Wat drinken Liz en ik allebei graag?','Wat moet ik bijkopen?'];
 function chatLaad(){if(!S.chat){try{S.chat=JSON.parse(ls.get('chat','[]'))}catch(e){S.chat=[]}}return S.chat}
@@ -941,11 +986,23 @@ async function prijsronde(){if(!S.kelder){toast('Open eerst even de kelder',1);r
     klaar++;const s=$('#prs');if(s)s.textContent=`${klaar} / ${ws.length} · ${gev} prijzen gevonden`;const b=$('#prb');if(b)b.style.width=(klaar/ws.length*100)+'%'}};
   await Promise.all([werk(),werk()]);await naRekenen();invalidate();
   const s=$('#prs');if(s)s.textContent=`Klaar: ${gev} van ${ws.length} prijzen gevonden. Prijsgroepen, niveaus en drinkvensters zijn opnieuw berekend.`}
+async function proefwijzersMaken(){if(!S.kelder){toast('Open eerst even de kelder',1);return}
+  const {data,error}=await sb.from('wijnen').select('wijn_id').is('proefwijzer',null);if(error)return toast('Draai eerst SQL 30 (proefwijzer) in Supabase',1);
+  const zonder=new Set(data.map(x=>x.wijn_id)),ws=S.kelder.filter(w=>zonder.has(w.wijn_id));
+  if(!ws.length)return toast('Alle wijnen in je kelder hebben al een proefwijzer');
+  if(!confirm(`${ws.length} wijnen: proefwijzer laten schrijven. Kost ±€${Math.max(1,Math.round(ws.length*.006))} en duurt ±${Math.ceil(ws.length/3*8/60)} minuten. Doorgaan?`))return;
+  sheet(`<h2>Proefwijzers</h2><p class="sub" id="pws">0 / ${ws.length}</p><div class="fill"><span id="pwb" style="width:0%"></span></div><div id="pwl" style="margin-top:8px;font-size:13px"></div>`);
+  let i=0,klaar=0;const log=t=>{const el=$('#pwl');if(el)el.insertAdjacentHTML('afterbegin',`<div>${t}</div>`)};
+  const werk=async()=>{while(i<ws.length){const w=ws[i++];for(let t=0;;t++){try{await verrijk(w.wijn_id,'proefwijzer');log('✓ '+esc(naam(w))+' '+(w.jaargang||''));break}
+      catch(e){if(t<2&&/rate.?limit|per minute|429|overloaded/i.test(e.message||'')){await new Promise(r=>setTimeout(r,30000))}else{log(`<span style="color:var(--bad)">${esc(naam(w))}: ${esc(e.message||e)}</span>`);break}}}
+    klaar++;const s=$('#pws');if(s)s.textContent=`${klaar} / ${ws.length}`;const b=$('#pwb');if(b)b.style.width=(klaar/ws.length*100)+'%'}};
+  await Promise.all([werk(),werk(),werk()]);const s=$('#pws');if(s)s.textContent=`Klaar: ${klaar} proefwijzers. Je ziet ze op elke wijnkaart en bij het openen van een fles.`}
 async function vraagControle(){const w=S.cur.w;try{await q(sb.from('wijnen').update({controle_gevraagd:!w.controle_gevraagd}).eq('wijn_id',w.wijn_id));
   toast(w.controle_gevraagd?'Controleverzoek ingetrokken':'Gemarkeerd — gaat mee met "Kopieer voor verrijking"');detail(w.wijn_id)}catch(e){}}
 function beheer(){sheet(`<h2>Beheer</h2>
   <div class="sec"><h3>Kelder verrijken</h3><p class="sub">Kopieert alle kelderwijnen die nog niet verrijkt zijn, gewijzigd zijn of die je liet controleren. Plak de tekst in de chat met Claude; je krijgt één SQL-bestand terug.</p><button class="btn full" onclick="exportVerrijking()">Kopieer voor verrijking</button></div>
   <div class="sec"><h3>Prijsronde</h3><p class="sub">Zoekt via internet de winkelprijs op van de kelderwijnen waar nu alleen een schatting staat en waar de prijs ertoe doet (dure flessen, of vlak bij een prijsgrens). Max. 40 per keer, ±€0,05–0,08 per wijn.</p><button class="btn sec2 full" onclick="closeSheet();prijsronde()">💶 Prijsronde starten</button></div>
+  <div class="sec"><h3>Proefwijzers</h3><p class="sub">Laat Claude voor elke wijn in je kelder beschrijven hoe hij smaakt op zijn best, te jong, te oud en als hij kapot is. Zonder zoeken, uit kennis: ±€0,005 per wijn, ±€1 voor de hele kelder. Wijnen die al een proefwijzer hebben worden overgeslagen; 🔎 Aanvullen maakt er later een met bron van.</p><button class="btn sec2 full" onclick="closeSheet();proefwijzersMaken()">✍ Proefwijzers maken</button></div>
   <div class="sec"><h3>Drinkvensters</h3><p class="sub">Rekent drinkvenster en topperiode opnieuw uit op basis van jaargang, streek, druif en prijs (stijlregels). Eigen notities en bronnen van producenten blijven staan.</p><button class="btn sec2 full" onclick="herbereken()">Drinkvensters herberekenen</button></div>
   <div class="sec"><h3>Smaakmodel</h3><p class="sub">Verwachte cijfers van Jeroen worden berekend uit zijn eigen beoordelingen (vergelijkbare wijnen, Vivino-niveau, niveau en jaargang). Dit gebeurt automatisch na elke beoordeling; hier kun je het handmatig doen.</p><button class="btn sec2 full" onclick="sb.rpc('voorspel_smaak').then(r=>{toast((r.data||0)+' wijnen herberekend');invalidate();render()})">Smaakmodel herberekenen</button></div>
   <div class="sec"><h3>Versie</h3><p class="sub">App-versie ${VERSIE}</p><button class="btn sec2 full" onclick="sb.auth.signOut().then(()=>location.reload())">Uitloggen</button></div>`)}
@@ -1097,7 +1154,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-05i';
+const VERSIE='2026-11-05j';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
