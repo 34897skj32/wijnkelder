@@ -216,12 +216,26 @@ function sc(cls,v,lab){return v==null?'':`<div class="sc ${cls}"><b>${f1(v)}</b>
 function scores(w){
   const mine=S.ik==='Liz'?w.rating_liz:w.rating_jeroen, pred=S.ik==='Liz'?w.likely_to_like_liz:w.likely_to_like_jeroen;
   return `<div class="scores">${sc('j',w.rating_jeroen,'Jeroen')}${sc('l',w.rating_liz,'Liz')}${sc('v',w.vivino_gemiddelde,'Vivino')}${mine==null&&pred!=null?sc('p',pred,'Verwacht '+(S.ik==='Liz'?'L':'J')):''}</div>`}
+/* prijs + hoe zeker: 2 = echte prijs (jouw aankoop/bon/sticker/eigen invoer, of winkelprijs van deze jaargang), 1 = redelijk (Vivino, winkelprijs andere jaargang), 0 = schatting */
+function prijsInfo(w){if(w.prijs==null)return null;const p=+w.prijs,pb=String(w.prijs_bron||'').replace(/ · online niet gevonden.*$/,'');let lvl=0,bron='schatting';
+  if(w.laatste_prijs!=null){lvl=2;bron='jouw aankoop'}
+  else if(/^aankoop/i.test(pb)){lvl=2;bron=pb.replace(/\s+\d{1,2}-\d{1,2}-\d{4}.*$/,'').replace(/^Aankoop /i,'factuur ')}
+  else if(/^prijssticker/i.test(pb)){lvl=2;bron='prijssticker op de fles'}
+  else if(/^notitie/i.test(pb)){lvl=2;bron='notitie op de fles'}
+  else if(/^eigen/i.test(pb)){lvl=2;bron='eigen invoer'}
+  else if(/^winkel/i.test(pb)){const sh=pb.replace(/^Winkel:\s*/i,'').replace(/\s*—.*$/,'').replace(/\s*·.*$/,''),jg=(pb.match(/prijs jaargang (\d{4})/)||[])[1];
+    lvl=jg?1:2;bron=jg?`winkelprijs jaargang ${jg} (${sh})`:sh}
+  else if(/^vivino/i.test(pb)){lvl=1;bron='Vivino-gemiddelde'}
+  const eur=x=>'€'+x.toFixed(2).replace('.',',');
+  return {lvl,p,bron,lang:lvl===2?`<b>${eur(p)}</b> <span style="color:var(--ok)">✓ ${esc(bron)}</span>`:`<b>± €${Math.round(p)}</b> <span class="muted">· ${esc(bron)}</span>`,
+    kort:lvl===2?`€${Math.round(p)} ✓`:`± €${Math.round(p)}`}}
+const prijsKort=w=>prijsInfo(w)?.kort||'';
 /* betrouwbaarheid per wijn: prijs · drinkvenster · gegevens (2 = goed onderbouwd, 1 = redelijk, 0 = schatting) */
-function bscore(w){const pb=w.prijs_bron||'',ab=w.advies_bron||'';
-  const pr=w.laatste_prijs!=null||/^(winkel|eigen|aankoop|prijssticker|notitie)/i.test(pb)?2:/^vivino/i.test(pb)?1:0;
+function bscore(w){const ab=w.advies_bron||'';
+  const pr=prijsInfo(w)?.lvl??0;
   const dv=/^(eigen|bron:)/i.test(ab)?2:/^stijlregel/i.test(ab)&&!/algemene regel/i.test(ab)?1:0;
   const gg=w.geverifieerd_op||/gecontroleerd|aangevuld via internet/i.test(w.validatiestatus||'')?2:(w.vivino_aantal||0)>=25?1:0;
-  const tekst=[['Prijs',pr,['geschat','Vivino-gemiddelde','echte prijs (bon/winkel/eigen)']],['Drinkvenster',dv,['algemene schatting','stijlregel + jaargangkaart','jouw notitie of een bron']],['Gegevens',gg,['niet gecontroleerd','Vivino (25+ beoordelingen)','gecontroleerd']]];
+  const tekst=[['Prijs',pr,['geschat','Vivino of andere jaargang','echte prijs (bon/winkel/eigen)']],['Drinkvenster',dv,['algemene schatting','stijlregel + jaargangkaart','jouw notitie of een bron']],['Gegevens',gg,['niet gecontroleerd','Vivino (25+ beoordelingen)','gecontroleerd']]];
   return {pr,dv,gg,tot:pr+dv+gg,tekst}}
 const BICON=['○','◐','●'];
 function betrMini(w){const b=bscore(w);return `<span class="muted" style="font-size:12px;white-space:nowrap" title="prijs · drinkvenster · gegevens">💶${BICON[b.pr]} 🗓${BICON[b.dv]} 🔎${BICON[b.gg]}</span>`}
@@ -232,7 +246,7 @@ const metaNV=w=>[w.regio||landNL(w.land),w.wijnkleur].filter(Boolean).join(' · 
 function cluster(items){const m=new Map();items.forEach(i=>{const k=wkey(i.w);if(!m.has(k))m.set(k,[]);m.get(k).push(i)});return [...m.values()].map(c=>c.sort((a,b)=>(b.w.jaargang||0)-(a.w.jaargang||0)))}
 function gcard(cl,mode){if(cl.length===1)return null;
   const p=(cl.find(i=>i.w.rating_jeroen!=null||i.w.rating_liz!=null)||cl[0]).w, tot=cl.reduce((a,i)=>a+(i.n||0),0);
-  const chips=cl.map(i=>`<span class="vt">${i.w.jaargang||'NV'}${mode==='rating'?(i.w.rating_jeroen!=null?` · <b>${f1(i.w.rating_jeroen)}</b>`:''):` · ${i.n}×`}</span>`).join('');
+  const chips=cl.map(i=>`<span class="vt">${i.w.jaargang||'NV'}${mode==='rating'?(i.w.rating_jeroen!=null?` · <b>${f1(i.w.rating_jeroen)}</b>`:''):` · ${i.n}×`}${prijsKort(i.w)?' · '+prijsKort(i.w):''}</span>`).join('');
   return `<button class="card" onclick="detail('${p.wijn_id}')">${lbl(p)}<div class="cbody">
   <div class="cname">${esc(naam(p))}</div><div class="cmeta">${esc(metaNV(p))} · ${cl.length} jaargangen${tot&&mode!=='rating'?` · <b>${tot} fl.</b>`:''}</div>
   <div class="vts">${chips}</div><div class="crow">${scores(p)}</div></div></button>`}
@@ -243,7 +257,7 @@ function issues(w){const r=[];if(w.validatiestatus==='Gecontroleerd')return r;
   if(/[?…]/.test(naam(w)))r.push('naam onvolledig');
   return r}
 function card(w,extra){return `<button class="card" onclick="detail('${w.wijn_id}')">${lbl(w)}<div class="cbody">
-  <div class="cname">${esc(naam(w))}</div><div class="cmeta">${esc(meta(w))}</div>
+  <div class="cname">${esc(naam(w))}</div><div class="cmeta">${esc([meta(w),prijsKort(w)].filter(Boolean).join(' · '))}</div>
   ${extra?`<div class="cmeta">${extra}</div>`:''}
   <div class="crow">${scores(w)}</div></div></button>`}
 
@@ -727,7 +741,8 @@ async function detail(id){
   const prof=[['Body',w.body],['Zuren',w.zuren],['Tannines',w.tannines],['Fruit',w.fruit]].filter(x=>x[1]);
   $('#sh .sheet').innerHTML=`<button class="x" onclick="closeSheet()" aria-label="Sluiten">✕</button><div class="grab"></div>
   <div class="hero">${lbl(w)}<div style="flex:1;min-width:0"><h2>${esc(naam(w))}</h2><p class="sub">${esc([w.jaargang,w.regio,w.land].filter(Boolean).join(' · '))}</p>
-   <p class="sub">${esc([w.wijnkleur,w.druiven,w.stijlfamilie||w.regionale_stijl].filter(Boolean).join(' · '))}</p></div></div>
+   <p class="sub">${esc([w.wijnkleur,w.druiven,w.stijlfamilie||w.regionale_stijl].filter(Boolean).join(' · '))}</p>
+   ${prijsInfo(w)?`<p class="sub" style="margin-top:4px;color:var(--ink)">${prijsInfo(w).lang}</p>`:''}</div></div>
   ${issues(w).length?`<p class="iss" style="margin-top:8px">⚠ ${issues(w).join(' · ')} — tik onderaan op Gegevens bewerken</p>`:''}
   ${schenkStrip(w)}
   <div class="big-scores">${bs('j',w.rating_jeroen,'Jeroen')}${bs('l',w.rating_liz,'Liz')}${bs('v',w.vivino_gemiddelde,'Vivino')}${bs('p',pred,'Verwacht')}</div>
@@ -739,7 +754,6 @@ async function detail(id){
   <div class="sec"><h3>In de kelder${w.voorraad?` · ${w.voorraad} fl.`:''}</h3>
    ${vak.length?vak.map((v,i)=>`<div class="loc"><div><b>${v.aantal}×</b> ${esc(ZNAAM[v.zone])}${v.vak?' · '+esc(v.vak):''}${w.zone_advies&&w.zone_advies!==v.zone?`<br><span class="iss">↔ advies: ${esc(w.zone_advies)}</span>`:''}</div><div class="row"><button class="btn sm sec2" onclick="fixFlow(${i})" title="Aantal corrigeren">±</button><button class="btn sm sec2" onclick="moveFlow(${i})">Verplaats</button><button class="btn sm" onclick="drinkFlow(${i})">Drinken</button></div></div>`).join(''):'<p class="muted">Niet op voorraad.</p>'}
    ${w.zone_advies?`<p class="sub" style="margin-top:6px">Bewaaradvies: <b>${esc(ZNAAM[w.zone_advies]||w.zone_advies)}</b> — ${esc(zoneReden(w))}</p>`:''}
-   <p class="sub" style="margin-top:4px">Prijs: ${w.prijs!=null?`<b>€${Number(w.prijs).toFixed(2).replace('.',',')}</b> ${w.laatste_prijs!=null?'<span style="color:var(--ok)">✓ jouw aankoop</span>':/^Winkel:/.test(w.prijs_bron||'')?`<span style="color:var(--ok)">✓ ${esc(w.prijs_bron.replace(/^Winkel: /,''))}</span>`:/Eigen|Notitie/.test(w.prijs_bron||'')?'<span style="color:var(--ok)">✓ eigen invoer</span>':'<span class="muted">(schatting)</span>'} · ${esc(w.prijscategorie)}`:'onbekend'}</p>
 </div>
   <div id="lijkt"></div>
   <div class="sec"><h3>Drinken</h3>${tl}
@@ -1197,7 +1211,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-05m';
+const VERSIE='2026-11-05n';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
