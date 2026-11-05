@@ -398,8 +398,8 @@ const FS=w=>/over de top|nog net/i.test(w.drinkstatus||'')?'eerst':(w.bewaarwijn
 const FASEN={eerst:'eerst op',nu:'nu drinken',bewaar:'bewaren'};
 const reCache={};const kre=p=>{try{return reCache[p]??=new RegExp(p,'i')}catch(e){return /$^/}};
 const OPENVAK=w=>w.wijnkleur==='Rood'?'16°C-T':'10°C-B';
-const ZONDERPOS=new Set(['18°C-H','18°C-D']);
-const plek=(k,pos)=>ZONDERPOS.has(k.vak_id)?k.naam:k.naam+' · '+pos;
+const zonderPos=k=>k.zone==='18°C';   // kelder: open planken en honingraat, geen voor/achter
+const plek=(k,pos)=>zonderPos(k)?k.naam:k.naam+' · '+pos;
 const inVak=(vak,k)=>vak===k.naam||(vak||'').startsWith(k.naam+' · ');
 function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
   const W=Object.fromEntries(S.kelder.map(w=>[w.wijn_id,w])),KI=Object.fromEntries(KV.map(k=>[k.vak_id,k]));
@@ -416,10 +416,17 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
     let k=null;
     if(u.open)k=KI[OPENVAK(u.w)];
     if(!k){const z=u.w.zone_advies||u.cz,t=[u.w.wijnkleur,u.w.stijlfamilie,u.w.druiven,u.w.regio,u.w.land,u.w.wijnnaam_cuvee,u.w.regionale_stijl].join(' ').toLowerCase();
-      const fz=a=>!a?0:a===u.f2||a===u.f?2:(a==='eerst'&&u.f==='nu'||a==='nu'&&u.f==='eerst')?1:a.startsWith('bewaar')&&u.f==='bewaar'?1:-2;
-      const nz=inZone[z+'|'+u.w.wijn_id]||0,inH=gezet.has('18°C-H|'+u.w.wijn_id);
-      // 18°C: één fles per wijn in de honingraat, de rest ernaast; 8°C: derde fles en verder naar de bodem (reserve)
-      let c=KV.filter(x=>x.zone===z).map(x=>({x,ok:!x.categorie||kre(x.categorie).test(t),s:(x.categorie?4:0)+fz(x.fase)-(x.vak_id==='18°C-H'&&inH?3:0)+(x.vak_id==='18°C-O'&&inH?3:0)+(x.vak_id==='8°C-B'&&nz>=2?6:0)+(u.cz===x.zone&&inVak(u.cv,x)?1.5:0)}));  // ligt hij hier al? dan liever laten liggen
+      const fz=a=>!a||['tweede','reserve','nieuw'].includes(a)?0:a===u.f2||a===u.f?2:(a==='eerst'&&u.f==='nu'||a==='nu'&&u.f==='eerst')?1:a.startsWith('bewaar')&&u.f==='bewaar'?1:-2;
+      const nz=inZone[z+'|'+u.w.wijn_id]||0;
+      // kelder: van elke wijn één fles op de pak-plekken, tweede flessen op 'tweede', derde+ op 'reserve'; 8°C: derde fles en verder naar de bodem
+      const B=u.f==='bewaar',extra=x=>{const f=x.fase||'';if(x.zone!=='18°C')return 0;   // klimaatkast: indeling ongewijzigd laten
+        if(f==='eerst')return u.f==='eerst'?6:B?-9:-3;
+        if(f==='nu')return B?-9:x.zone==='18°C'&&nz>=1?-5:0;
+        if(f==='tweede')return B?-9:nz>=1?7:-1;
+        if(f.startsWith('bewaar'))return B?0:-6;
+        if(f==='reserve')return nz>=2?8:-5;
+        if(f==='nieuw')return x.soort==='doos'?-4:-3;return 0};
+      let c=KV.filter(x=>x.zone===z).map(x=>({x,ok:!x.categorie||kre(x.categorie).test(t),s:(x.categorie?4:0)+fz(x.fase)+extra(x)+(x.vak_id==='8°C-B'&&nz>=2?6:0)+(u.cz===x.zone&&inVak(u.cv,x)?1.5:0)}));  // ligt hij hier al? dan liever laten liggen
       c.sort((a,b)=>b.ok-a.ok||b.s-a.s||vrij[b.x.vak_id]-vrij[a.x.vak_id]);
       // eerst een passende lade met ruimte, anders een andere lade in dezelfde zone met ruimte, anders (te vol) de best passende
       // gewenste kant: bewaarwijn (en tweede fles) achter, de rest voor; is die kant vol, dan liever een andere lade dan de verkeerde kant
@@ -448,7 +455,7 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
   Object.values(perWijn).forEach(us=>{if(us.length<2)return;const doelen=us.map(u=>({k:u.k,pos:u.pos,open:u.open})),vrijU=[...us],over=[];
     doelen.forEach(d=>{const i=vrijU.findIndex(u=>u.cz===d.k.zone&&u.cv===plek(d.k,d.pos));if(i>=0){Object.assign(vrijU[i],d);vrijU.splice(i,1)}else over.push(d)});
     over.forEach((d,i)=>Object.assign(vrijU[i],d))});
-  units.forEach(u=>{if(u.k){u.doel=plek(u.k,u.pos);u.hier=u.cz===u.k.zone&&u.cv===u.doel}});
+  units.forEach(u=>{if(u.k){if(zonderPos(u.k))u.pos='voor';u.doel=plek(u.k,u.pos);u.hier=u.cz===u.k.zone&&u.cv===u.doel}});
   return {units:units.filter(u=>u.k),KV,vrij}}
 function kchips(us){const m=new Map();us.forEach(u=>{const key=u.w.wijn_id+'|'+(u.hier?'':u.cz+u.cv);if(!m.has(key))m.set(key,{u,n:0});m.get(key).n++});
   return [...m.values()].map(({u,n})=>`<button class="kc s-${u.f}${u.hier?'':' mv'}" onclick="detail('${u.w.wijn_id}')">${n>1?n+'× ':''}${u.open?'🫗 ':''}<span>${u.w.producent?`<b style="font-weight:600">${esc(u.w.producent)}</b> · `:''}${esc(u.w.wijnnaam_cuvee||'')} ${u.w.jaargang||'NV'}</span>${u.hier?'':`<i>↘ nu ${esc(u.cz)}${u.cv?' · '+esc(u.cv):''}</i>`}</button>`).join('')}
@@ -458,7 +465,7 @@ function kastTekening(P){
   const zones=[['16°C','z16','16°C · rood'],['10°C','z10','10°C · vol wit, Champagne, rosé'],['8°C','z8','8°C · fris wit, bubbels'],['18°C','z18','Kelder 18°C']];
   return `<div class="kast"><b style="font-size:14px">Tekening</b><span class="muted" style="font-size:12px"> · tik op een lade voor de lijst, op een bolletje voor de wijn</span>${zones.map(([z,c,t])=>{const ks=P.KV.filter(k=>k.zone===z).sort((a,b)=>b.volgorde-a.volgorde);if(!ks.length)return'';
     const n=P.units.filter(u=>u.k.zone===z).length,cap=ks.reduce((a,k)=>a+k.capaciteit,0);
-    return `<div class="kz ${c}"><h5><span>${t}</span><span>${n}/${cap}</span></h5>${z!=='18°C'?'<div class="kr" style="cursor:default;border-top:0;padding:0"><span></span><span class="muted" style="font-size:10px;text-align:center">voor</span><span class="muted" style="font-size:10px;text-align:center">achter</span></div>':''}${ks.map(k=>{const us=P.units.filter(u=>u.k===k),mv=us.some(u=>!u.hier),zp=ZONDERPOS.has(k.vak_id)||k.cap_voor==null&&z==='18°C';
+    return `<div class="kz ${c}"><h5><span>${t}</span><span>${n}/${cap}</span></h5>${z!=='18°C'?'<div class="kr" style="cursor:default;border-top:0;padding:0"><span></span><span class="muted" style="font-size:10px;text-align:center">voor</span><span class="muted" style="font-size:10px;text-align:center">achter</span></div>':''}${ks.map(k=>{const us=P.units.filter(u=>u.k===k),mv=us.some(u=>!u.hier),zp=zonderPos(k);
       const cv=k.cap_voor??Math.ceil(k.capaciteit/2);
       return `<div class="kr${mv?' todo':''}" onclick="document.getElementById('lade-${k.vak_id}')?.scrollIntoView({behavior:'smooth',block:'start'})"><span class="kn">${esc(k.naam.replace(/ \(.*\)$/,''))}${k.label?`<i>${esc(k.label)}</i>`:''}</span>${zp?`<span class="kh" style="grid-column:2/4">${dots(us,k.capaciteit)}</span>`:`<span class="kh">${dots(us.filter(u=>u.pos==='voor'),cv)}</span><span class="kh">${dots(us.filter(u=>u.pos==='achter'),k.capaciteit-cv)}</span>`}</div>`}).join('')}</div>`}).join('')}
   <div class="leg"><span><i class="dot eerst"></i>eerst op</span><span><i class="dot nu"></i>nu drinken</span><span><i class="dot bewaar"></i>bewaren</span><span><i class="dot nu mv"></i>moet hierheen</span><span><i class="dot leeg"></i>vrij</span></div></div>`}
@@ -480,7 +487,7 @@ function drawKaart(){const P=kastPlan();
     h+=ks.filter(k=>!S.kalleen||!nmv||P.units.some(u=>u.k===k&&!u.hier)).map(k=>{const alle=P.units.filter(u=>u.k.vak_id===k.vak_id),us=S.kalleen&&nmv?alle.filter(u=>!u.hier):alle,voor=us.filter(u=>u.pos==='voor'),acht=us.filter(u=>u.pos==='achter').sort((a,b)=>(a.w.beste_drinkmoment_vanaf||9999)-(b.w.beste_drinkmoment_vanaf||9999));
       const mv=alle.filter(u=>!u.hier).length,vol=alle.length>k.capaciteit;
       return `<div class="lade${mv?' todo':''}" id="lade-${k.vak_id}" style="scroll-margin-top:12px"><h4><span>${esc(k.naam)} ${mv?`<span class="badge">${mv} te doen</span>`:''}</span><small>${alle.length} / ${k.capaciteit}${vol?' · <b style="color:var(--bad)">te vol</b>':''}</small></h4><div class="lab">${k.label?`🏷 <b>${esc(k.label)}</b>${k.label_achter?' · achter: '+esc(k.label_achter):''}`:'zonder label — '+esc((k.functie||'').replace(/^Geen label: /,''))}</div><div class="fill ${vol?'vol':''}"><span style="width:${Math.min(100,alle.length/k.capaciteit*100)}%"></span></div>
-      ${voor.length?`<div class="pos">Voorin${k.label?' · '+esc(k.label):''} — eerst op vooraan</div>${kchips(voor)}`:''}${acht.length?`<div class="pos">Achterin${k.label_achter?' · '+esc(k.label_achter):''}</div>${kchips(acht)}`:''}${!alle.length?'<p class="muted" style="font-size:13px">Leeg</p>':''}
+      ${voor.length?`<div class="pos">${zonderPos(k)?esc(k.label||'Flessen'):`Voorin${k.label?' · '+esc(k.label):''} — eerst op vooraan`}</div>${kchips(voor)}`:''}${acht.length?`<div class="pos">Achterin${k.label_achter?' · '+esc(k.label_achter):''}</div>${kchips(acht)}`:''}${!alle.length?'<p class="muted" style="font-size:13px">Leeg</p>':''}
       ${mv?`<button class="btn sm" style="margin-top:8px" onclick="ladeKlaar('${k.vak_id}',this)">✓ Lade ingericht · ${mv} verplaatsing${mv>1?'en':''} vastleggen</button>`:''}</div>`}).join('')}
   $('#main').innerHTML=h}
 async function ladeKlaar(id,btn){const P=kastPlan(),g={};
@@ -963,7 +970,7 @@ async function quizKlaar(a){const kl={};['Rood','Wit','Rosé','Mousserend','Dess
     sheet(`<h2>Klaar!</h2><p style="margin:10px 0">${S.ik==='Liz'?`De verwachte cijfers voor Liz zijn opnieuw berekend voor ${n} wijnen. Kijk in Kelder → Smaakmatch → "Voor mij" (met Liz gekozen) wat er voor haar uitkomt.`:'Je profiel is opgeslagen.'}</p><p class="sub">Elke echte beoordeling van ${S.ik} weegt zwaarder dan de quiz.</p><button class="btn full" onclick="closeSheet();render()">Sluiten</button>`)}
   catch(e){closeSheet()}}
 async function herbereken(){try{const n=await q(sb.rpc('pas_drinkregels_toe'));toast(`${n} drinkvensters bijgewerkt`);invalidate();render()}catch(e){}}
-function vakList(){return [...new Set([...(S.kv||[]).flatMap(k=>ZONDERPOS.has(k.vak_id)?[k.naam]:[k.naam+' · voor',k.naam+' · achter']),...(S.vakken||[]).map(v=>v.vak)].filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}
+function vakList(){return [...new Set([...(S.kv||[]).flatMap(k=>zonderPos(k)?[k.naam]:[k.naam+' · voor',k.naam+' · achter']),...(S.vakken||[]).map(v=>v.vak)].filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}
 
 /* ---------- toevoegen ---------- */
 function addFlow(id){
@@ -1090,7 +1097,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-05h';
+const VERSIE='2026-11-05i';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
