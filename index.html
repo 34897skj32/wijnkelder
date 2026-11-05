@@ -422,11 +422,16 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
       let c=KV.filter(x=>x.zone===z).map(x=>({x,ok:!x.categorie||kre(x.categorie).test(t),s:(x.categorie?4:0)+fz(x.fase)-(x.vak_id==='18°C-H'&&inH?3:0)+(x.vak_id==='18°C-O'&&inH?3:0)+(x.vak_id==='8°C-B'&&nz>=2?6:0)+(u.cz===x.zone&&inVak(u.cv,x)?1.5:0)}));  // ligt hij hier al? dan liever laten liggen
       c.sort((a,b)=>b.ok-a.ok||b.s-a.s||vrij[b.x.vak_id]-vrij[a.x.vak_id]);
       // eerst een passende lade met ruimte, anders een andere lade in dezelfde zone met ruimte, anders (te vol) de best passende
-      k=(c.find(y=>y.ok&&vrij[y.x.vak_id]>0)||c.find(y=>vrij[y.x.vak_id]>0))?.x;
-      // zone helemaal vol? dan de zone ernaast (wit/rosé/bubbels: 8↔10°C), anders de kelder; pas als alles vol is: te vol
+      // gewenste kant: bewaarwijn (en tweede fles) achter, de rest voor; is die kant vol, dan liever een andere lade dan de verkeerde kant
+      const dp=x=>u.f==='bewaar'||gezet.has(x.vak_id+'|'+u.w.wijn_id)?'achter':'voor';
+      const kant=x=>x.cap_voor==null?vrij[x.vak_id]>0:dp(x)==='voor'?(vVoor[x.vak_id]||0)<x.cap_voor:(vAchter[x.vak_id]||0)<x.capaciteit-x.cap_voor;
+      const geenEerstVak=y=>!(u.f==='bewaar'&&y.x.fase==='eerst');   // bewaarwijn nooit in 'Eerst op'
+      k=(c.find(y=>y.ok&&geenEerstVak(y)&&vrij[y.x.vak_id]>0&&kant(y.x))||c.find(y=>y.ok&&geenEerstVak(y)&&vrij[y.x.vak_id]>0)
+        ||c.find(y=>geenEerstVak(y)&&vrij[y.x.vak_id]>0&&kant(y.x)))?.x;
+      // zone vol (voor deze fles)? dan de zone ernaast (wit/rosé/bubbels: 8↔10°C), anders de kelder (bewaarwijn op de bewaarplanken)
       if(!k){const alt=u.w.wijnkleur==='Rood'?['18°C']:z==='8°C'?['10°C','18°C']:z==='10°C'?['8°C','18°C']:['18°C'];
-        for(const z2 of alt){const c2=KV.filter(x=>x.zone===z2&&vrij[x.vak_id]>0).sort((a,b)=>(b.categorie&&kre(b.categorie).test(t))-(a.categorie&&kre(a.categorie).test(t))||(a.vak_id==='18°C-D')-(b.vak_id==='18°C-D')||vrij[b.vak_id]-vrij[a.vak_id]);if(c2.length){k=c2[0];break}}}
-      if(!k)k=c[0]?.x;}
+        for(const z2 of alt){const c2=KV.filter(x=>x.zone===z2&&vrij[x.vak_id]>0).sort((a,b)=>(b.categorie&&kre(b.categorie).test(t))-(a.categorie&&kre(a.categorie).test(t))||fz(b.fase)-fz(a.fase)||(a.vak_id==='18°C-D')-(b.vak_id==='18°C-D')||vrij[b.vak_id]-vrij[a.vak_id]);if(c2.length){k=c2[0];break}}}
+      if(!k)k=(c.find(y=>vrij[y.x.vak_id]>0)||c[0])?.x;}
     if(!k)continue;
     const al=gezet.has(k.vak_id+'|'+u.w.wijn_id);
     u.k=k;vrij[k.vak_id]--;gezet.add(k.vak_id+'|'+u.w.wijn_id);inZone[k.zone+'|'+u.w.wijn_id]=(inZone[k.zone+'|'+u.w.wijn_id]||0)+1;
@@ -1068,7 +1073,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-05e';
+const VERSIE='2026-11-05f';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
