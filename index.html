@@ -511,18 +511,25 @@ function openBlok(){const os=S.open||[];if(!os.length)return'';const W=Object.fr
 function openSectie(w){const o=(S.open||[]).find(x=>x.wijn_id===w.wijn_id);if(!o)return'';const i=openInfo(w,o);
   return `<div class="sec"><h3>🫗 Open fles</h3><p class="sub">${esc(i.lbl)} · <b style="color:${i.kl}">${esc(i.txt)}</b>${/^Coravin/.test(o.methode)&&w.wijnkleur==='Mousserend'?' · Coravin is niet geschikt voor bubbels (behalve Coravin Sparkling)':''}</p>
   <div class="row" style="margin-top:8px"><button class="btn sm sec2" style="flex:1" onclick="glasErbij(${o.open_id},${o.glazen})">+1 glas</button><button class="btn sm" style="flex:1" onclick="flesLeeg(${o.open_id})">Fles leeg · afboeken</button></div>
+  <p class="sub" style="margin-top:8px">Hoe is hij nu? <span class="chips" style="display:inline-flex;gap:4px;flex-wrap:wrap">${['te jong','op zijn best','over de top'].map(f=>`<button class="chip" onclick="glasFase(${o.open_id},'${f}')">${f}</button>`).join('')}</span>${o.notitie?`<br><span class="muted">${esc(o.notitie)}</span>`:''}</p>
   <p style="text-align:center;margin-top:8px"><button class="chip" onclick="openOngedaan(${o.open_id})">↶ Toch niet geopend · ongedaan maken</button></p></div>`}
+async function glasFase(id,f){const w=S.cur.w,o=(S.open||[]).find(x=>x.open_id===id);await leerFase(w,f);
+  await sb.from('open_flessen').update({notitie:((o?.notitie?o.notitie+' · ':'')+new Date().toLocaleDateString('nl-NL')+': '+f).slice(-300)}).eq('open_id',id);
+  toast('Genoteerd: '+f+' — drinkvenster bijgesteld');invalidate();await naRekenen();await kelderView();detail(w.wijn_id)}
 function openFlow(){const w=S.cur.w;let m='Coravin';
   sheet(`<h2>Fles openen</h2><p class="sub">${esc(naam(w))} ${w.jaargang||''}</p>
   <label class="f">Hoe?</label><div class="seg" id="om"><button data-m="Coravin" class="on">Coravin · kurk</button><button data-m="Coravin-schroefdop">Coravin · schroefdop</button></div><p class="sub" style="margin-top:4px">Toch de kurk eruit? <button class="chip" data-m="Kurk" onclick="this.closest('.sheet').querySelector('#om').dispatchEvent(new CustomEvent('kies',{detail:'Kurk'}))">Kurk eruit</button></p>
   <p class="sub" id="oh" style="margin-top:6px"></p>
+  <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">🔍 Waar let je op? (proefwijzer)</summary>${proefwijzerHtml(w)}</details>
+  <label class="f">Hoe was het eerste glas? (optioneel — de app leert hiervan)</label><div class="seg" id="ofs">${['te jong','op zijn best','over de top'].map(f=>`<button data-f="${f}">${f}</button>`).join('')}</div>
   <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px"><input type="checkbox" id="omv" checked> Leg hem in het vak open flessen (${w.wijnkleur==='Rood'?'rood: 16°C toonvak':'wit/rosé/bubbels: 10°C bodem'})</label>
   <button class="btn full" id="go" style="margin-top:14px">Openen · eerste glas</button>`);
   const hint=()=>{const h=houdbaar(w,{methode:m});$('#oh').textContent=m==='Coravin'?(w.wijnkleur==='Mousserend'?'Let op: een gewone Coravin werkt niet bij bubbels.':`Blijft ${h>=365?'een jaar of langer':'maanden'} goed; de fles blijft gewoon in de voorraad tot hij leeg is.`):m==='Coravin-schroefdop'?'Met de Coravin-schroefdop: binnen 1–2 maanden opdrinken.':`Kurk eruit: daarna nog ±${h} dag${h>1?'en':''} goed (koel en dicht bewaren).`};hint();
   const kies=x=>{m=x;$('#om').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.m===x));hint()};
   $('#om').onclick=e=>{if(e.target.dataset.m)kies(e.target.dataset.m)};$('#om').addEventListener('kies',e=>kies(e.detail));
+  let ofase=null;$('#ofs').onclick=e=>{const f=e.target.dataset.f;if(!f)return;ofase=ofase===f?null:f;$('#ofs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.f===ofase))};
   $('#go').onclick=async e=>{e.target.disabled=true;
-    try{await q(sb.from('open_flessen').insert({wijn_id:w.wijn_id,methode:m,door:S.ik}));
+    try{await q(sb.from('open_flessen').insert({wijn_id:w.wijn_id,methode:m,door:S.ik,notitie:ofase?'Eerste glas: '+ofase:null}));if(ofase)await leerFase(w,ofase);
       const k=(S.kv||[]).find(x=>x.vak_id===OPENVAK(w));
       if($('#omv').checked&&k&&!S.cur.vak.some(v=>v.zone===k.zone&&inVak(v.vak,k))){const v=S.cur.vak[0];
         await q(sb.rpc('fles_verplaatsen',{p_wijn:w.wijn_id,p_van_zone:v.zone,p_van_vak:v.vak||'',p_naar_zone:k.zone,p_naar_vak:plek(k,m==='Coravin'?'achter':'voor'),p_aantal:1,p_door:S.ik}))}
@@ -1154,7 +1161,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-05j';
+const VERSIE='2026-11-05k';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
