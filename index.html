@@ -443,6 +443,11 @@ function kastPlan(){const KV=S.kv||[];if(!KV.length)return null;
       if(u.pos==='voor')vVoor[k.vak_id]=nv+1;else vAchter[k.vak_id]=na+1}}
   // bewaarplanken (kelder): voorin wat het eerst op dronk komt, achterin de rest
   KV.filter(k=>(k.fase||'').startsWith('bewaar')).forEach(k=>{const us=units.filter(u=>u.k===k).sort((a,b)=>(a.w.beste_drinkmoment_vanaf||9999)-(b.w.beste_drinkmoment_vanaf||9999));us.forEach((u,i)=>u.pos=i<Math.ceil(us.length/2)?'voor':'achter')});
+  // flessen van dezelfde wijn zijn uitwisselbaar: koppel elke bestemming eerst aan een fles die daar al ligt (anders blijven ze eindeloos van plek wisselen)
+  const perWijn={};units.filter(u=>u.k).forEach(u=>(perWijn[u.w.wijn_id]=perWijn[u.w.wijn_id]||[]).push(u));
+  Object.values(perWijn).forEach(us=>{if(us.length<2)return;const doelen=us.map(u=>({k:u.k,pos:u.pos,open:u.open})),vrijU=[...us],over=[];
+    doelen.forEach(d=>{const i=vrijU.findIndex(u=>u.cz===d.k.zone&&u.cv===plek(d.k,d.pos));if(i>=0){Object.assign(vrijU[i],d);vrijU.splice(i,1)}else over.push(d)});
+    over.forEach((d,i)=>Object.assign(vrijU[i],d))});
   units.forEach(u=>{if(u.k){u.doel=plek(u.k,u.pos);u.hier=u.cz===u.k.zone&&u.cv===u.doel}});
   return {units:units.filter(u=>u.k),KV,vrij}}
 function kchips(us){const m=new Map();us.forEach(u=>{const key=u.w.wijn_id+'|'+(u.hier?'':u.cz+u.cv);if(!m.has(key))m.set(key,{u,n:0});m.get(key).n++});
@@ -731,6 +736,11 @@ function editWine(){const w=S.cur.w;
   <label class="f">Bewaarzone</label><div class="seg" id="e_z">${['',...ZONES].map(z=>`<button data-z="${z}" class="${(w.bewaarzone_advies||'')===z?'on':''}">${z||'Automatisch'}</button>`).join('')}</div>
   <p class="sub" style="margin-top:4px">Alleen voor uitzonderingen, bijv. rood dat je koud drinkt. Automatisch = de app kiest op stijl en drinkmoment.</p>
   <label class="f">Schenktemperatuur (°C)</label><input class="inp" id="e_temp" inputmode="numeric" value="${w.serveertemperatuur_c??''}">
+  <label class="f">Drinkvenster (eigen notitie of advies van de producent)</label>
+  <div class="row" style="gap:6px;align-items:center"><input class="inp" id="e_dv1" inputmode="numeric" placeholder="vanaf" value="${w.drinkvenster_vanaf_jaar??''}" style="flex:1"> – <input class="inp" id="e_dv2" inputmode="numeric" placeholder="tot" value="${w.drinkvenster_tot_jaar??''}" style="flex:1"></div>
+  <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:13px;white-space:nowrap">op z'n best</span><input class="inp" id="e_db1" inputmode="numeric" placeholder="vanaf" value="${w.beste_drinkmoment_vanaf??''}" style="flex:1"> – <input class="inp" id="e_db2" inputmode="numeric" placeholder="tot" value="${w.beste_drinkmoment_tot??''}" style="flex:1"></div>
+  <input class="inp" id="e_dvb" style="margin-top:6px" placeholder="bron, bijv. 'producent: rustig tot 2034'" value="${esc(/^eigen notitie: /i.test(w.advies_bron||'')?w.advies_bron.replace(/^eigen notitie: /i,''):'')}">
+  <p class="sub" style="margin-top:4px">Pas je dit aan, dan gaat het voor op de berekening van de app. ${/^eigen/i.test(w.advies_bron||'')?`<label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="e_dvauto"> terug naar automatisch</label>`:''}</p>
   <button class="btn full" id="go">Opslaan</button>`);
   $('#e_z').onclick=e=>{if(e.target.dataset.z!==undefined)$('#e_z').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target))};
   $('#e_k').onclick=e=>{if(e.target.tagName==='BUTTON')$('#e_k').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target))};
@@ -739,6 +749,13 @@ function editWine(){const w=S.cur.w;
     if(v.prijs_indicatie_eur!=w.prijs_indicatie_eur)v.prijs_bron='Eigen invoer';
     if(['producent','wijnnaam_cuvee','jaargang'].some(k=>v[k]!=w[k]))v.controle_gevraagd=true;
     v.wijnkleur=$('#e_k .on')?.textContent||w.wijnkleur;
+    {const jr=x=>{const n=parseInt($(x).value);return n>=1950&&n<=2100?n:null};const nv=[jr('#e_dv1'),jr('#e_dv2'),jr('#e_db1'),jr('#e_db2')];
+     const ov=[w.drinkvenster_vanaf_jaar,w.drinkvenster_tot_jaar,w.beste_drinkmoment_vanaf,w.beste_drinkmoment_tot].map(x=>x??null);const bron=$('#e_dvb').value.trim();
+     if($('#e_dvauto')?.checked){v.advies_bron='Schatting (terug naar automatisch)'}
+     else if(nv.some((x,i)=>x!==ov[i])||(bron&&!(w.advies_bron||'').includes(bron))){
+       if(nv[0]&&nv[1]&&nv[1]<nv[0])return toast('Drinkvenster: "tot" ligt voor "vanaf"',1);
+       [v.drinkvenster_vanaf_jaar,v.drinkvenster_tot_jaar,v.beste_drinkmoment_vanaf,v.beste_drinkmoment_tot]=nv;
+       v.advies_bron='Eigen notitie'+(bron?': '+bron:'');v.advies_laatst_bijgewerkt=new Date().toISOString()}}
     v.bewaarzone_advies=$('#e_z .on')?.dataset.z||null;const tp=parseInt($('#e_temp').value);v.serveertemperatuur_c=tp>=4&&tp<=20?tp:null;
     if(!v.wijnnaam_cuvee)return toast('Wijnnaam is verplicht',1);
     if(issues(w).length||/te controleren/i.test(w.validatiestatus||''))v.validatiestatus='Gecontroleerd';
@@ -1073,7 +1090,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-05f';
+const VERSIE='2026-11-05h';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
