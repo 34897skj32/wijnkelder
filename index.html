@@ -813,7 +813,13 @@ function rateFlow(id,dm){const w=S.cur?.w;
     if(ctx)rows.forEach(r=>r.persoonlijke_notitie=ctx);
     if(!rows.length){closeSheet();render();return}
     e.target.disabled=true;
-    try{await q(sb.from('proefnotities').insert(rows));toast('Beoordeling opgeslagen');sb.rpc('voorspel_smaak').then(()=>{S.kelder=null});invalidate();closeSheet();render();detail(id)}catch(err){e.target.disabled=false}};
+    try{await q(sb.from('proefnotities').insert(rows));toast('Beoordeling opgeslagen');
+      // eigen proefnotitie = zekerste smaakprofiel: neemt het over van schattingen en webinfo
+      const pk=rows.find(r=>['body','zuren','tannines','fruit','hout'].some(k=>r['proef_'+k]));
+      if(pk){const up={profiel_bron:'Eigen proefnotitie ('+pk.persoon+', '+new Date().toISOString().slice(0,10)+')'};
+        ['body','zuren','tannines','fruit'].forEach(k=>{if(pk['proef_'+k])up[k]=pk['proef_'+k]});
+        if(pk.proef_hout)up.houtgebruik=['Geen','Geen','Licht','Merkbaar','Merkbaar','Veel'][pk.proef_hout]||null;
+        sb.from('wijnen').update(up).eq('wijn_id',id).then(()=>{})}sb.rpc('voorspel_smaak').then(()=>{S.kelder=null});invalidate();closeSheet();render();detail(id)}catch(err){e.target.disabled=false}};
 }
 
 /* ---------- verplaatsen ---------- */
@@ -1062,7 +1068,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-05d';
+const VERSIE='2026-11-05e';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
