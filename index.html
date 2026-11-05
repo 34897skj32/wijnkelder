@@ -482,7 +482,8 @@ function openBlok(){const os=S.open||[];if(!os.length)return'';const W=Object.fr
     return `<div class="ofl" onclick="detail('${w.wijn_id}')"><span>${esc(naam(w))} ${w.jaargang||''}<br><span class="muted" style="font-size:12px">${esc(i.lbl)}</span></span><span style="color:${i.kl};font-size:13px;text-align:right">${esc(i.txt)}</span></div>`}).join('')}</div>`}
 function openSectie(w){const o=(S.open||[]).find(x=>x.wijn_id===w.wijn_id);if(!o)return'';const i=openInfo(w,o);
   return `<div class="sec"><h3>🫗 Open fles</h3><p class="sub">${esc(i.lbl)} · <b style="color:${i.kl}">${esc(i.txt)}</b>${/^Coravin/.test(o.methode)&&w.wijnkleur==='Mousserend'?' · Coravin is niet geschikt voor bubbels (behalve Coravin Sparkling)':''}</p>
-  <div class="row" style="margin-top:8px"><button class="btn sm sec2" style="flex:1" onclick="glasErbij(${o.open_id},${o.glazen})">+1 glas</button><button class="btn sm" style="flex:1" onclick="flesLeeg(${o.open_id})">Fles leeg · afboeken</button></div></div>`}
+  <div class="row" style="margin-top:8px"><button class="btn sm sec2" style="flex:1" onclick="glasErbij(${o.open_id},${o.glazen})">+1 glas</button><button class="btn sm" style="flex:1" onclick="flesLeeg(${o.open_id})">Fles leeg · afboeken</button></div>
+  <p style="text-align:center;margin-top:8px"><button class="chip" onclick="openOngedaan(${o.open_id})">↶ Toch niet geopend · ongedaan maken</button></p></div>`}
 function openFlow(){const w=S.cur.w;let m='Coravin';
   sheet(`<h2>Fles openen</h2><p class="sub">${esc(naam(w))} ${w.jaargang||''}</p>
   <label class="f">Hoe?</label><div class="seg" id="om"><button data-m="Coravin" class="on">Coravin · kurk</button><button data-m="Coravin-schroefdop">Coravin · schroefdop</button></div><p class="sub" style="margin-top:4px">Toch de kurk eruit? <button class="chip" data-m="Kurk" onclick="this.closest('.sheet').querySelector('#om').dispatchEvent(new CustomEvent('kies',{detail:'Kurk'}))">Kurk eruit</button></p>
@@ -498,6 +499,9 @@ function openFlow(){const w=S.cur.w;let m='Coravin';
       if($('#omv').checked&&k&&!S.cur.vak.some(v=>v.zone===k.zone&&inVak(v.vak,k))){const v=S.cur.vak[0];
         await q(sb.rpc('fles_verplaatsen',{p_wijn:w.wijn_id,p_van_zone:v.zone,p_van_vak:v.vak||'',p_naar_zone:k.zone,p_naar_vak:plek(k,m==='Coravin'?'achter':'voor'),p_aantal:1,p_door:S.ik}))}
       toast('Geopend — proost!');invalidate();await kelderView();detail(w.wijn_id)}catch(err){e.target.disabled=false}}}
+async function openOngedaan(id){if(!confirm('Deze fles weer als dicht markeren? Hij blijft gewoon in de voorraad.'))return;
+  await q(sb.from('open_flessen').update({leeg_op:new Date().toISOString(),notitie:'Ongedaan: toch niet geopend'}).eq('open_id',id));
+  const w=S.cur.w;S.open=(S.open||[]).filter(o=>o.open_id!==id);invalidate();toast('Weer dicht — de Kaart geeft aan of hij terug moet naar zijn lade');await kelderView();detail(w.wijn_id)}
 async function glasErbij(id,n){await q(sb.from('open_flessen').update({glazen:n+1,laatst_glas:new Date().toISOString()}).eq('open_id',id));const w=S.cur.w;invalidate();await kelderView();detail(w.wijn_id)}
 async function flesLeeg(id){await q(sb.from('open_flessen').update({leeg_op:new Date().toISOString()}).eq('open_id',id));S.open=(S.open||[]).filter(o=>o.open_id!==id);
   const w=S.cur.w,k=(S.kv||[]).find(x=>x.vak_id===OPENVAK(w)),i=Math.max(0,S.cur.vak.findIndex(v=>k&&v.zone===k.zone&&inVak(v.vak,k)));
@@ -708,13 +712,18 @@ function editWine(){const w=S.cur.w;
   sheet(`<h2>Gegevens bewerken</h2><p class="sub">${esc(naam(w))}</p>
   ${EF.map(([k,l])=>`<label class="f">${l}</label><input class="inp" id="e_${k}" value="${esc(w[k]??'')}" ${k==='jaargang'?'inputmode="numeric"':''}>`).join('')}
   <label class="f">Kleur</label><div class="seg" id="e_k">${KLEUREN.map(k=>`<button class="${w.wijnkleur===k?'on':''}">${k}</button>`).join('')}</div>
+  <label class="f">Bewaarzone</label><div class="seg" id="e_z">${['',...ZONES].map(z=>`<button data-z="${z}" class="${(w.bewaarzone_advies||'')===z?'on':''}">${z||'Automatisch'}</button>`).join('')}</div>
+  <p class="sub" style="margin-top:4px">Alleen voor uitzonderingen, bijv. rood dat je koud drinkt. Automatisch = de app kiest op stijl en drinkmoment.</p>
+  <label class="f">Schenktemperatuur (°C)</label><input class="inp" id="e_temp" inputmode="numeric" value="${w.serveertemperatuur_c??''}">
   <button class="btn full" id="go">Opslaan</button>`);
+  $('#e_z').onclick=e=>{if(e.target.dataset.z!==undefined)$('#e_z').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target))};
   $('#e_k').onclick=e=>{if(e.target.tagName==='BUTTON')$('#e_k').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===e.target))};
   $('#go').onclick=async e=>{
     const v={};EF.forEach(([k])=>{const x=$('#e_'+k).value.trim();v[k]=k==='jaargang'?(parseInt(x)||null):k==='prijs_indicatie_eur'?(parseFloat(x.replace(',','.'))||null):(x||null)});
     if(v.prijs_indicatie_eur!=w.prijs_indicatie_eur)v.prijs_bron='Eigen invoer';
     if(['producent','wijnnaam_cuvee','jaargang'].some(k=>v[k]!=w[k]))v.controle_gevraagd=true;
     v.wijnkleur=$('#e_k .on')?.textContent||w.wijnkleur;
+    v.bewaarzone_advies=$('#e_z .on')?.dataset.z||null;const tp=parseInt($('#e_temp').value);v.serveertemperatuur_c=tp>=4&&tp<=20?tp:null;
     if(!v.wijnnaam_cuvee)return toast('Wijnnaam is verplicht',1);
     if(issues(w).length||/te controleren/i.test(w.validatiestatus||''))v.validatiestatus='Gecontroleerd';
     e.target.disabled=true;
@@ -1042,7 +1051,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-05a';
+const VERSIE='2026-11-05c';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
