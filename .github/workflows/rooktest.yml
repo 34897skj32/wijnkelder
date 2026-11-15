@@ -1,0 +1,19 @@
+# Controleert bij elke push of de app nog opstart en de belangrijkste schermen werken (met nepgegevens).
+# Mislukt hij, dan krijg je een mail van GitHub en zie je een rood kruisje bij de commit.
+name: Rooktest
+on:
+  push:
+    paths: ['index.html', 'test/**', '.github/workflows/rooktest.yml']
+  workflow_dispatch:
+jobs:
+  rooktest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save playwright@1.48.2
+      - run: npx playwright install --with-deps chromium
+      - run: node test/rooktest.js
