@@ -274,10 +274,17 @@ function card(w,extra){return `<button class="card" onclick="detail('${w.wijn_id
 
 /* ---------- auth ---------- */
 async function start(){
-  const {data:{session}}=await sb.auth.getSession();
-  if(!session) return loginView();
+  let session=null;try{({data:{session}}=await sb.auth.getSession())}catch(e){}
+  if(!session){if(!navigator.onLine&&leesCache())return render();return loginView()}
   render();
 }
+/* snelle start: de laatste stand van de kelder staat op de telefoon; die zie je meteen, daarna ververst de app op de achtergrond.
+   Zonder bereik blijft de laatste stand staan (alleen kijken). Na een wijziging haalt de app altijd verse gegevens op. */
+const CK='blanche_kelder_v1';
+function bewaarCache(){try{localStorage.setItem(CK,JSON.stringify({t:Date.now(),kelder:S.kelder,vakken:S.vakken,cap:S.cap,kv:S.kv,open:S.open,aj:S.aj}))}catch(e){}}
+function leesCache(){try{return JSON.parse(localStorage.getItem(CK)||'null')}catch(e){return null}}
+function cacheRegel(){if(!S.cacheT)return'';const d=new Date(S.cacheT).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  return S.offline?`<p class="sub" style="margin:4px 0 8px;color:var(--bad)">📴 Offline — je ziet de laatste stand van ${d}. Wijzigen kan zodra je weer bereik hebt.</p>`:`<p class="sub" style="margin:4px 0 8px">⏳ Laatste stand van ${d} — bijwerken…</p>`}
 function loginView(){
   $('#app').innerHTML=`<div class="login"><h1>Wijnkelder</h1><p class="muted">Log in met je account.</p>
   <label class="f">E-mail</label><input class="inp" id="em" type="email" autocomplete="username">
@@ -317,10 +324,17 @@ async function kelderView(){
   const G={zone:'Zone',kaart:'Kaart',status:'Drinkmoment',smaak:'Smaakmatch',prijs:'Prijs',kleur:'Kleur',land:'Land',stijl:'Stijl',betr:'Betrouwbaarheid'};
   $('#hsub').innerHTML=filterbar('Zoek in kelder…',`<div class="chips">${Object.entries(G).map(([k,l])=>`<button class="chip ${S.groep===k?'on':''}" onclick="S.groep='${k}';ls.set('groep','${k}');drawKelder();this.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===this))">${l}</button>`).join('')}</div>`);
   if(!S.kelder){
-    const [w,v,z]=await Promise.all([q(sb.from('wijn_overzicht').select(COLS).gt('voorraad',0)),q(sb.from('voorraad_per_vak').select('*')),q(sb.from('bewaarzones').select('zone,capaciteit'))]);
-    S.kelder=w;S.vakken=v;S.cap=Object.fromEntries(z.map(x=>[x.zone,x.capaciteit]));
-    const [kv,op,aj]=await Promise.all([sb.from('kastvakken').select('*'),sb.from('open_flessen').select('*').is('leeg_op',null),sb.from('andere_jaargang').select('*')]);
-    S.kv=kv.data||[];S.open=op.data||[];S.aj={};(aj.data||[]).forEach(a=>{(S.aj[a.wijn_id]=S.aj[a.wijn_id]||{})[a.persoon]=a});
+    const c=!S.cacheGebruikt&&leesCache();S.cacheGebruikt=true;
+    if(c?.kelder){Object.assign(S,{kelder:c.kelder,vakken:c.vakken,cap:c.cap,kv:c.kv||[],open:c.open||[],aj:c.aj||{},cacheT:c.t});drawKelder()}
+    try{
+      const qq=c?.kelder?async p=>{const {data,error}=await p;if(error)throw error;return data}:q;   // met opgeslagen stand: geen foutmelding bij geen bereik
+      const [w,v,z]=await Promise.all([qq(sb.from('wijn_overzicht').select(COLS).gt('voorraad',0)),qq(sb.from('voorraad_per_vak').select('*')),qq(sb.from('bewaarzones').select('zone,capaciteit'))]);
+      const [kv,op,aj]=await Promise.all([sb.from('kastvakken').select('*'),sb.from('open_flessen').select('*').is('leeg_op',null),sb.from('andere_jaargang').select('*')]);
+      S.kelder=w;S.vakken=v;S.cap=Object.fromEntries(z.map(x=>[x.zone,x.capaciteit]));
+      S.kv=kv.data||[];S.open=op.data||[];S.aj={};(aj.data||[]).forEach(a=>{(S.aj[a.wijn_id]=S.aj[a.wijn_id]||{})[a.persoon]=a});
+      S.cacheT=null;S.offline=false;bewaarCache();
+    }catch(e){if(!c?.kelder)throw e;S.offline=true}
+    if(S.tab!=='kelder')return;
   }
   drawKelder();
 }
@@ -348,7 +362,7 @@ function drawKelder(){
   else if(S.groep==='smaak'){const o=['JL','J','L','G',null].map(SM);keys.sort((a,b)=>o.indexOf(a)-o.indexOf(b))}
   else if(S.groep==='betr'){const o=['Vooral schatting — eerst controleren','Redelijk onderbouwd','Goed onderbouwd'];keys.sort((a,b)=>o.indexOf(a)-o.indexOf(b))}
   else if(ORD[S.groep]) keys.sort((a,b)=>ORD[S.groep].indexOf(a)-ORD[S.groep].indexOf(b)); else keys.sort();
-  $('#main').innerHTML=todoBox()+(S.q?'':openBlok()+vanavond())+`<p class="sub">${tot} flessen · ${ws.length} wijnen</p>`+keys.map(k=>{
+  $('#main').innerHTML=cacheRegel()+todoBox()+(S.q?'':openBlok()+vanavond())+`<p class="sub">${tot} flessen · ${ws.length} wijnen</p>`+keys.map(k=>{
     const it=by[k].sort(S.groep==='betr'?(a,b)=>bscore(a.w).tot-bscore(b.w).tot||(b.w.prijs||0)-(a.w.prijs||0):(a,b)=>(PRIO[a.w.drinkstatus]??9)-(PRIO[b.w.drinkstatus]??9)||naam(a.w).localeCompare(naam(b.w)));
     return `<div class="group"><h2>${esc(S.groep==='status'?DSN(k):k)}</h2><span>${it.reduce((a,i)=>a+i.n,0)} fl.</span></div>${S.groep==='status'&&FASE[k]?`<p class="sub" style="margin:-4px 0 8px">${FASE[k]}</p>`:''}<div class="list">${cluster(it).map(cl=>gcard(cl)||card(cl[0].w,`<span class="cnt">${cl[0].n}×</span> ${S.groep!=='zone'?esc(cl[0].w.locaties||''):''} ${stag(cl[0].w.drinkstatus)}${venster(cl[0].w)?`<br><span class="muted">${venster(cl[0].w)}</span>`:''}${S.groep==='betr'?'<br>'+betrMini(cl[0].w):''}`)).join('')}</div>`}).join('')+(S.groep==='betr'?`<p class="sub" style="margin-top:10px">💶 prijs · 🗓 drinkvenster · 🔎 gegevens — ● goed onderbouwd · ◐ redelijk · ○ schatting. Binnen elke groep staan de zwakste en duurste bovenaan: die eerst controleren (wijnkaart → 🔎 Aanvullen via internet, of ✎ zelf).</p>`:'');
 }
@@ -393,12 +407,21 @@ function gerechtTop(g){const r=GERECHT[g],me=S.ik==='Liz'?'liz':'jeroen',re=new 
   $('#gtop').innerHTML=`<div class="group"><h2>${esc(g)}</h2></div><p class="sub" style="margin-bottom:8px">Zoek naar: ${r.w}.</p><div class="list">${res.map(o=>card(o.w,`${o.hit?'<span class="tag best">klassieke combinatie</span> ':''}${stag(o.w.drinkstatus)}<br><span class="muted">📍 ${esc((o.w.locaties||'').split(',')[0].replace(/ \(\d+\)$/,''))}</span>`)).join('')||'<div class="empty-state">Niets passends in je kelder</div>'}</div>`;
   $('#gtop').scrollIntoView({behavior:'smooth'})}
 function nHerschik(){try{const P=S.kv?.length?kastPlan():null;return P?P.units.filter(u=>!u.hier).length:0}catch(e){return 0}}
+/* moet nu op: voorbij het drinkvenster, of het venster eindigt dit jaar */
+const nuOp=w=>w.voorraad>0&&(w.drinkstatus==='Over de top'||(w.drinkvenster_tot_jaar&&w.drinkvenster_tot_jaar<=new Date().getFullYear()&&w.drinkstatus!=='Laten liggen'));
+function nuOpLijst(){const ws=(S.kelder||[]).filter(nuOp).sort((a,b)=>(a.drinkvenster_tot_jaar||0)-(b.drinkvenster_tot_jaar||0));
+  sheet(`<h2>Moet nu op</h2><p class="sub">Voorbij het drinkvenster of het venster eindigt dit jaar. Klopt het venster niet? Open de wijn en tik op 🗓 Controleer drinkvenster, of geef bij het drinken de fase door.</p>
+  <div class="list" style="margin-top:8px">${ws.map(w=>card(w,`${stag(w.drinkstatus)} · ${venster(w)}<br><span class="muted">📍 ${esc((w.locaties||'').split(',')[0].replace(/ \(\d+\)$/,''))}</span>`)).join('')}</div>`)}
+function backupOud(){const b=ls.get('laatste_backup','');return !b||Date.now()-new Date(b).getTime()>30*864e5}
 function todoBox(){const nh=nHerschik(),nv=nh||nVerplaats(),nc=S.kelder.filter(w=>issues(w).length).length,today=new Date().toISOString().slice(0,10);
-  if((!nv&&!nc)||ls.get('todo_hide','')===today+':'+nv+':'+nc)return'';
+  const nop=S.kelder.filter(nuOp).reduce((a,w)=>a+w.voorraad,0),bk=backupOud();
+  if((!nv&&!nc&&!nop&&!bk)||ls.get('todo_hide','')===today+':'+nv+':'+nc+':'+nop)return'';
   return `<div class="sec" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:10px 12px;margin:4px 0 8px;position:relative;padding-right:46px"><b style="font-size:14px;white-space:nowrap">Te doen</b>
+  ${nop?`<button class="chip" style="border-color:var(--bad);color:var(--bad);font-weight:600" onclick="nuOpLijst()">⚠ ${nop} fles${nop===1?'':'sen'} moet${nop===1?'':'en'} nu op</button>`:''}
   ${nv?`<button class="chip" onclick="S.groep=S.kv?.length?'kaart':'verplaats';S.kalleen=true;render();scrollTo(0,0)">🗺 ${nv} fles${nv===1?'':'sen'} herschikken</button>`:''}
+  ${bk?`<button class="chip" onclick="beheer();setTimeout(()=>$('#bkp')?.scrollIntoView({block:'center'}),50)">💾 Back-up maken</button>`:''}
   ${nc?`<button class="chip" onclick="S.groep='check';drawKelder();scrollTo(0,0)">⚠ ${nc} controleren</button>`:''}
-  <button class="x" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);margin:0;width:30px;height:30px;font-size:14px" aria-label="Verbergen" onclick="ls.set('todo_hide','${today}:${nv}:${nc}');this.parentNode.remove()">✕</button></div>`}
+  <button class="x" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);margin:0;width:30px;height:30px;font-size:14px" aria-label="Verbergen" onclick="ls.set('todo_hide','${today}:${nv}:${nc}:${nop}');this.parentNode.remove()">✕</button></div>`}
 function terug(t){return `<button class="chip" style="margin:6px 0 4px" onclick="S.groep=ls.get('groep','zone');if(['check','verplaats','kaart'].includes(S.groep))S.groep='zone';render()">← Terug naar kelder</button><h2 style="font-size:20px;margin:6px 0 4px">${t}</h2>`}
 function zoneReden(w){const z=w.zone_advies,id=w.zone_ideaal,f=(w.drinkstatus||'').toLowerCase();
   if(w.bewaarzone_advies)return 'eigen keuze';
@@ -1124,13 +1147,26 @@ async function proefwijzersMaken(){if(!S.kelder){toast('Open eerst even de kelde
   await Promise.all([werk(),werk(),werk()]);const s=$('#pws');if(s)s.textContent=`Klaar: ${klaar} proefwijzers. Je ziet ze op elke wijnkaart en bij het openen van een fles.`}
 async function vraagControle(){const w=S.cur.w;try{await q(sb.from('wijnen').update({controle_gevraagd:!w.controle_gevraagd}).eq('wijn_id',w.wijn_id));
   toast(w.controle_gevraagd?'Controleverzoek ingetrokken':'Gemarkeerd — gaat mee met "Kopieer voor verrijking"');detail(w.wijn_id)}catch(e){}}
+/* back-up: alle tabellen als één JSON-bestand (per 1000 regels opgehaald) */
+const BACKUP_TABELLEN=['wijnen','proefnotities','drinkmomenten','voorraadmutaties','open_flessen','kastvakken','bewaarzones','aankopen','aankoopregels','verlanglijst','liz_indicaties','externe_scores','drinkregels','jaargangkaart','producent_niveau','regio_map','smaakquiz'];
+async function backup(btn){btn.disabled=true;const out={app:'Blanche',versie:VERSIE,gemaakt:new Date().toISOString(),tabellen:{}},mis=[];
+  for(const t of BACKUP_TABELLEN){btn.textContent='Back-up maken… '+t;const rows=[];
+    try{for(let i=0;;i+=1000){const {data,error}=await sb.from(t).select('*').range(i,i+999);if(error)throw error;rows.push(...data);if(data.length<1000)break}out.tabellen[t]=rows}
+    catch(e){if(!/does not exist|could not find/i.test(e.message||''))mis.push(t)}}
+  const naam=`blanche-backup-${new Date().toISOString().slice(0,10)}.json`,file=new File([JSON.stringify(out)],naam,{type:'application/json'}),n=Object.values(out.tabellen).reduce((a,r)=>a+r.length,0);
+  try{if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:naam});
+    else{const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=naam;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),10000)}
+    ls.set('laatste_backup',new Date().toISOString());toast(`Back-up gemaakt: ${n} regels`+(mis.length?` · niet gelukt: ${mis.join(', ')}`:''),mis.length?1:0)}
+  catch(e){if(e.name!=='AbortError')toast('Back-up opslaan mislukt: '+(e.message||e),1)}
+  btn.disabled=false;btn.textContent='⬇ Back-up downloaden'}
 function beheer(){sheet(`<h2>Beheer</h2>
   <div class="sec"><h3>Kelder verrijken</h3><p class="sub">Kopieert alle kelderwijnen die nog niet verrijkt zijn, gewijzigd zijn of die je liet controleren. Plak de tekst in de chat met Claude; je krijgt één SQL-bestand terug.</p><button class="btn full" onclick="exportVerrijking()">Kopieer voor verrijking</button></div>
   <div class="sec"><h3>Prijsronde</h3><p class="sub">Zoekt via internet de winkelprijs op van de kelderwijnen waar nu alleen een schatting staat en waar de prijs ertoe doet (dure flessen, of vlak bij een prijsgrens). Max. 40 per keer, ±€0,05–0,08 per wijn.</p><button class="btn sec2 full" onclick="closeSheet();prijsronde()">💶 Prijsronde starten</button></div>
   <div class="sec"><h3>Proefwijzers</h3><p class="sub">Laat Claude voor elke wijn in je kelder beschrijven hoe hij smaakt op zijn best, te jong, te oud en als hij kapot is. Zonder zoeken, uit kennis: ±€0,005 per wijn, ±€1 voor de hele kelder. Wijnen die al een proefwijzer hebben worden overgeslagen; 🔎 Aanvullen maakt er later een met bron van.</p><button class="btn sec2 full" onclick="closeSheet();proefwijzersMaken()">✍ Proefwijzers maken</button></div>
   <div class="sec"><h3>Drinkvensters</h3><p class="sub">Rekent drinkvenster en topperiode opnieuw uit op basis van jaargang, streek, druif en prijs (stijlregels). Eigen notities en bronnen van producenten blijven staan.</p><button class="btn sec2 full" onclick="herbereken()">Drinkvensters herberekenen</button></div>
   <div class="sec"><h3>Smaakmodel</h3><p class="sub">Verwachte cijfers van Jeroen worden berekend uit zijn eigen beoordelingen (vergelijkbare wijnen, Vivino-niveau, niveau en jaargang). Dit gebeurt automatisch na elke beoordeling; hier kun je het handmatig doen.</p><button class="btn sec2 full" onclick="sb.rpc('voorspel_smaak').then(r=>{toast((r.data||0)+' wijnen herberekend');invalidate();render()})">Smaakmodel herberekenen</button></div>
-  <div class="sec"><h3>Versie</h3><p class="sub">App-versie ${VERSIE}</p><button class="btn sec2 full" onclick="sb.auth.signOut().then(()=>location.reload())">Uitloggen</button></div>`)}
+  <div class="sec"><h3>Back-up</h3><p class="sub">Slaat al je gegevens (wijnen, voorraad, beoordelingen, drinkmomenten, open flessen, indeling) op als één bestand. Kies daarna 'Bewaar in Bestanden' of iCloud. Eén keer per maand is genoeg; je krijgt een herinnering bij Te doen. Terugzetten doe je samen met Claude. Etiketfoto's zitten er niet in (die staan los in Supabase).<br>Laatste back-up: <b>${ls.get('laatste_backup','')?new Date(ls.get('laatste_backup','')).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'}):'nog nooit'}</b></p><button class="btn full" id="bkp" onclick="backup(this)">⬇ Back-up downloaden</button></div>
+  <div class="sec"><h3>Versie</h3><p class="sub">App-versie ${VERSIE}</p><button class="btn sec2 full" onclick="try{localStorage.removeItem(CK)}catch(e){};sb.auth.signOut().then(()=>location.reload())">Uitloggen</button></div>`)}
 const QUIZ=[
  ['kleur','Welke kleur drink je het liefst?',[['Rood','Rood'],['Wit','Wit'],['Rosé','Rosé'],['Mousserend','Bubbels'],['-','Maakt niet uit']]],
  ['niet','Wat drink je liever niet?',[['Rood','Rood'],['Wit','Wit'],['Rosé','Rosé'],['Mousserend','Bubbels'],['-','Alles is goed']]],
@@ -1279,7 +1315,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-14a';
+const VERSIE='2026-11-15a';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
