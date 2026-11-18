@@ -466,11 +466,17 @@ function gerechtTop(g){const r=GERECHT[g],me=S.ik==='Liz'?'liz':'jeroen',re=new 
 function nHerschik(){try{const P=S.kv?.length?kastPlan():null;return P?P.units.filter(u=>!u.hier).length:0}catch(e){return 0}}
 /* moet nu op: voorbij het drinkvenster, of het venster eindigt dit jaar */
 const nuOp=w=>w.voorraad>0&&(w.drinkstatus==='Over de top'||(w.drinkvenster_tot_jaar&&w.drinkvenster_tot_jaar<=new Date().getFullYear()&&w.drinkstatus!=='Laten liggen'));
-function nuOpLijst(){const ws=(S.kelder||[]).filter(nuOp).sort((a,b)=>(a.drinkvenster_tot_jaar||0)-(b.drinkvenster_tot_jaar||0));
-  const nw=new Set(ws.map(w=>w.wijn_id)).size;
+/* vensters die al online zijn nagekeken (ook zonder resultaat) komen niet opnieuw in de ronde: venster_gecheckt (bestand 33) */
+async function laadVcheck(){try{const {data,error}=await sb.from('wijnen').select('wijn_id,venster_gecheckt').not('venster_gecheckt','is',null);if(!error)S.vcheck={...(S.vcheck||{}),...Object.fromEntries((data||[]).map(r=>[r.wijn_id,r.venster_gecheckt]))}}catch(e){}return S.vcheck||{}}
+const venGecheckt=w=>/^(bron|eigen)/i.test(w.advies_bron||'')||!!(S.vcheck||{})[w.wijn_id];
+async function markeerGecheckt(id){const d=new Date().toISOString().slice(0,10);(S.vcheck=S.vcheck||{})[id]=d;try{await sb.from('wijnen').update({venster_gecheckt:d}).eq('wijn_id',id)}catch(e){}}
+async function nuOpLijst(){if(!S.kelder)await kelderView();await laadVcheck();const ws=(S.kelder||[]).filter(nuOp).sort((a,b)=>(a.drinkvenster_tot_jaar||0)-(b.drinkvenster_tot_jaar||0));
+  // alleen wijnen die nog níet met een bron of door jou zijn gecontroleerd komen in de ronde (geen dubbel werk, geen dubbele kosten)
+  const gecontr=venGecheckt,open_=[...new Set(ws.filter(w=>!gecontr(w)).map(w=>w.wijn_id))],nw=open_.length,ng=new Set(ws.filter(gecontr).map(w=>w.wijn_id)).size;
   sheet(`<h2>Moet nu op</h2><p class="sub">Voorbij het drinkvenster of het venster eindigt dit jaar. Klopt het venster niet? Laat ze hieronder in één keer controleren, of geef bij het drinken de fase door.</p>
-  <button class="btn full" style="margin-top:10px" onclick="vensterRonde(${JSON.stringify([...new Set(ws.map(w=>w.wijn_id))]).replace(/"/g,"'")})">🗓 Controleer al deze vensters (${nw} wijnen · ±€${(nw*.03).toFixed(2).replace('.',',')})</button>
-  <div class="list" style="margin-top:8px">${ws.map(w=>card(w,`${stag(w.drinkstatus)} · ${venster(w)}<br><span class="muted">📍 ${esc((w.locaties||'').split(',')[0].replace(/ \(\d+\)$/,''))}</span>`)).join('')}</div>`)}
+  ${nw?`<button class="btn full" style="margin-top:10px" onclick="vensterRonde(${JSON.stringify(open_).replace(/"/g,"'")})">🗓 Controleer ${nw} nog niet gecontroleerde venster${nw===1?'':'s'} (±€${(nw*.03).toFixed(2).replace('.',',')})</button>${ng?`<p class="sub" style="margin-top:6px">${ng} wijn${ng===1?' is':'en zijn'} al gecontroleerd (✓) en ${ng===1?'wordt':'worden'} overgeslagen.</p>`:''}`
+   :`<p class="sub" style="margin-top:10px;color:var(--ok)"><b>✓ Alle vensters hiervan zijn al gecontroleerd</b> (met een bron, door jou, of online nagekeken zonder ander advies). Deze moeten dus echt op — of geef bij het drinken 'nog goed' door, dan schuift het venster op.</p>`}
+  <div class="list" style="margin-top:8px">${ws.map(w=>card(w,`${stag(w.drinkstatus)}${gecontr(w)?' <span class="tag best">✓ gecontroleerd</span>':''} · ${venster(w)}<br><span class="muted">📍 ${esc((w.locaties||'').split(',')[0].replace(/ \(\d+\)$/,''))}</span>`)).join('')}</div>`)}
 function backupOud(){const b=ls.get('laatste_backup','');return !b||Date.now()-new Date(b).getTime()>30*864e5}
 function todoBox(){const nh=nHerschik(),nv=nh||nVerplaats(),nc=S.kelder.filter(w=>issues(w).length).length,today=new Date().toISOString().slice(0,10);
   const nop=S.kelder.filter(nuOp).reduce((a,w)=>a+w.voorraad,0),bk=backupOud();
@@ -906,7 +912,7 @@ async function detail(id){
   const noteH=n=>`<div class="note ${n.persoon}"><b>${esc(n.persoon)} · ${f1(n.eigen_rating)}</b>${n.fase?` · ${esc(FICO[n.fase]||n.fase)}${n.eigen_rating!=null&&FASE_UIT.includes(n.fase)&&!teltMee(n,KG,w.wijnkleur)?' <span class="muted">· telt niet mee in je smaak</span>':''}`:''}${n.opnieuw_kopen?` · opnieuw kopen: ${esc(n.opnieuw_kopen)}`:''}<div>${esc(n.eigen_proefnotitie||'')}</div>${n.persoonlijke_notitie?`<small>${esc(n.persoonlijke_notitie)}</small>`:''}${PK.some(([k])=>n['proef_'+k])?`<small>${PK.filter(([k])=>n['proef_'+k]).map(([k,l])=>l+' '+n['proef_'+k]).join(' · ')}</small>`:''}<small>${esc(n.drinkdatum_bevestigd||n.review_kalenderdatum||(n.aangemaakt||'').slice(0,10))} · ${esc(n.bron)}</small></div>`;
   const pwH=proefwijzerHtml(w),bn={Hoog:3,Middel:2,Laag:1}[betr]||0;
   const meerJ=sib.length>1,ander=sib.filter(x=>x.wijn_id!==id),totaal=sib.some(x=>x.wijn_id===id)?sib.reduce((a,x)=>a+(x.voorraad||0),0):(w.voorraad||0);
-  const gecontroleerd=/^(bron|eigen)/i.test(w.advies_bron||'');
+  if(!S.vcheck)await laadVcheck();const gecontroleerd=venGecheckt(w);
   const acts=[vak.length?`<button class="btn" onclick="pickDrink()"><em>🍷</em>Fles gedronken</button>`:'',vak.length&&!(S.open||[]).some(o=>o.wijn_id===id)?`<button class="btn sec2" onclick="openFlow()"><em>🫗</em>Openen / Coravin</button>`:'',`<button class="btn sec2" onclick="rateFlow('${id}')"><em>✍️</em>Beoordelen</button>`].filter(Boolean);
   $('#sh .sheet').innerHTML=`<button class="x" onclick="closeSheet()" aria-label="Sluiten">✕</button><div class="grab"></div>
   <div class="hero"><div class="lblw">${lbl(w)}<button class="edit2" onclick="editWine()" aria-label="Gegevens bewerken">✎</button></div><div style="flex:1;min-width:0"><h2>${esc(naam(w))}</h2><p class="sub">${esc([w.jaargang,w.regio,w.land].filter(Boolean).join(' · '))}</p>
@@ -1224,7 +1230,7 @@ async function aanvullen(){const w=S.cur.w,btn=$('#aanv');if(btn){btn.disabled=t
   catch(e){toast('Aanvullen mislukt: '+(e.message||e),1);if(btn){btn.disabled=false;btn.textContent='🔎 Aanvullen via internet'}}}
 /* alleen het drinkvenster opzoeken; een eigen venster wordt nooit stil overschreven */
 async function checkVenster(){const w=S.cur.w,b=$('#cdv');if(b){b.disabled=true;b.textContent='Zoekt drinkadvies… (±20–30 s)'}
-  try{const r=await verrijk(w.wijn_id,'venster');
+  try{const r=await verrijk(w.wijn_id,'venster');markeerGecheckt(w.wijn_id);
     if(r.voorstel){const v=r.voorstel;sheet(`<h2>Drinkadvies gevonden</h2><p class="sub">${esc(v.bron)}: <b>${v.drinkvenster_vanaf_jaar}–${v.drinkvenster_tot_jaar}</b>${v.beste_drinkmoment_vanaf?`, op zijn best ${v.beste_drinkmoment_vanaf}–${v.beste_drinkmoment_tot}`:''}.${v.citaat?`<br><i>"${esc(v.citaat)}"</i>`:''}</p>
       <p class="sub">Nu staat er je eigen venster: <b>${w.drinkvenster_vanaf_jaar??'?'}–${w.drinkvenster_tot_jaar??'?'}</b> (${esc(w.advies_bron||'')}).</p>
       <div class="row" style="margin-top:10px"><button class="btn" style="flex:1" id="ovn">Overnemen</button><button class="btn sec2" style="flex:1" onclick="closeSheet()">Mijn eigen houden</button></div>`);
@@ -1247,7 +1253,7 @@ async function vensterRonde(ids){if(!ids?.length)return;
   let i=0,klaar=0,aan=0,geen=0;const voorstel=[];const log=t=>{const el=$('#vrl');if(el)el.insertAdjacentHTML('afterbegin',`<div>${t}</div>`)};
   const poging=async id=>{for(let t=0;;t++){try{return await verrijk(id,'venster')}catch(e){if(t<2&&/rate.?limit|per minute|429|overloaded/i.test(e.message||'')){log('<span class="muted">even wachten (limiet API)…</span>');await new Promise(r=>setTimeout(r,45000))}else throw e}}};
   const werk=async()=>{while(i<ids.length){const id=ids[i++];
-    try{const r=await poging(id);if(r.voorstel){voorstel.push({id,v:r.voorstel});log(`${naamVan(id)}: <span class="muted">eigen venster — zie voorstel</span>`)}
+    try{const r=await poging(id);markeerGecheckt(id);if(r.voorstel){voorstel.push({id,v:r.voorstel});log(`${naamVan(id)}: <span class="muted">eigen venster — zie voorstel</span>`)}
       else if(r.gevonden?.length){aan++;log(`${naamVan(id)}: ${esc(r.gevonden.join(', '))}`)}else{geen++;log(`${naamVan(id)}: <span class="muted">geen specifiek advies gevonden, venster blijft</span>`)}}
     catch(e){log(`${naamVan(id)}: <span style="color:var(--bad)">${esc(e.message||e)}</span>`)}
     klaar++;const s=$('#vrs');if(s)s.textContent=`${klaar} / ${ids.length} · ${aan} aangepast`;const b=$('#vrb');if(b)b.style.width=(klaar/ids.length*100)+'%'}};
@@ -1449,7 +1455,7 @@ async function addForm(w){
       toast(`${n} fles${n>1?'sen':''} toegevoegd`);invalidate();closeSheet();S.tab='kelder';ls.set('tab','kelder');render();
     }catch(err){e.target.disabled=false}};
 }
-const VERSIE='2026-11-17d';
+const VERSIE='2026-11-18a';
 // Updatecheck: haalt de live versie op zonder cache; bij een nieuwere versie herlaadt de app zichzelf (ook vanaf het beginscherm)
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'})).text();
   const m=t.match(/const VERSIE='([^']+)'/);if(m&&m[1]!==VERSIE){toast('Nieuwe versie — even herladen…');setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),800)}}catch(e){}}
